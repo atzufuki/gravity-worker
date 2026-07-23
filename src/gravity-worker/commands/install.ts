@@ -38,6 +38,7 @@ async function resolveAgyCredentials(): Promise<string | undefined> {
 
   const home = Deno.env.get("HOME") ?? "";
   const possiblePaths = [
+    `${home}/.gemini/oauth_creds.json`,
     `${home}/.config/antigravity/credentials.json`,
     `${home}/.gemini/antigravity-cli/credentials.json`,
     `${home}/.config/Antigravity/credentials.json`,

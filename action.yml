@@ -63,7 +63,8 @@ runs:
 
         if [ -n "$AGY_CREDENTIALS" ]; then
           echo "🔑 Restoring Antigravity CLI OAuth session token..."
-          mkdir -p "$HOME/.config/antigravity" "$HOME/.gemini/antigravity-cli"
+          mkdir -p "$HOME/.gemini" "$HOME/.config/antigravity" "$HOME/.gemini/antigravity-cli"
+          echo "$AGY_CREDENTIALS" > "$HOME/.gemini/oauth_creds.json"
           echo "$AGY_CREDENTIALS" > "$HOME/.config/antigravity/credentials.json"
           echo "$AGY_CREDENTIALS" > "$HOME/.gemini/antigravity-cli/credentials.json"
         fi
