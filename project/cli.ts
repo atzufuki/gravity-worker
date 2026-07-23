@@ -138,9 +138,17 @@ export async function main(args: string[] = Deno.args) {
         console.log(`- Branch: ${worktree.branchName}`);
         console.log(`- Worktree: ${worktree.worktreePath}`);
 
+        if (result.error) {
+          console.error(`⚠️ Agent Error: ${result.error}`);
+        }
+
         if (!flags["keep-worktree"] && flags["dry-run"]) {
           console.log(`🧹 Cleaning up dry-run worktree...`);
           await removeWorktree(worktree, { deleteBranch: true });
+        }
+
+        if (!result.success) {
+          Deno.exit(1);
         }
       } catch (err) {
         console.error(`❌ Task execution failed:`, err);
