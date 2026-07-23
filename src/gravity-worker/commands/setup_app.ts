@@ -63,7 +63,7 @@ export class SetupAppCommand extends BaseCommand {
     }
 
     if (!repoSpec) {
-      const ghContext = await getGitHubContext();
+      const ghContext = await getGitHubContext(targetDir);
       if (ghContext.repoOwner && ghContext.repoName) {
         repoSpec = `${ghContext.repoOwner}/${ghContext.repoName}`;
       }

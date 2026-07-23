@@ -27,7 +27,8 @@ export function isFinnishText(text: string): boolean {
 }
 
 /**
- * Parses repository owner and name from local git remote.origin.url.
+ * Parses repository owner and name from local git remote.origin.url in specified directory.
+ * Supports repository names containing dots (e.g. siht.io).
  */
 export async function getRepoFromGitRemote(cwd = "."): Promise<{ repoOwner?: string; repoName?: string }> {
   try {
@@ -41,8 +42,9 @@ export async function getRepoFromGitRemote(cwd = "."): Promise<{ repoOwner?: str
     if (!output.success) return {};
 
     const remoteUrl = new TextDecoder().decode(output.stdout).trim();
-    // Handles git@github.com:owner/repo.git or https://github.com/owner/repo.git
-    const match = remoteUrl.match(/github\.com[:/]([^/]+)\/([^/.]+)(?:\.git)?$/);
+    // Strip trailing .git if present
+    const cleanUrl = remoteUrl.replace(/\.git$/, "");
+    const match = cleanUrl.match(/github\.com[:/]([^/]+)\/([^/]+)$/);
     if (match) {
       return { repoOwner: match[1], repoName: match[2] };
     }
@@ -54,9 +56,9 @@ export async function getRepoFromGitRemote(cwd = "."): Promise<{ repoOwner?: str
 
 /**
  * Parses GitHub event payload from environment (GITHUB_EVENT_PATH & GITHUB_REPOSITORY),
- * with fallback to local Git remote origin URL.
+ * with fallback to local Git remote origin URL of specified cwd directory.
  */
-export async function getGitHubContext(): Promise<GitHubEventContext> {
+export async function getGitHubContext(cwd = "."): Promise<GitHubEventContext> {
   const eventPath = Deno.env.get("GITHUB_EVENT_PATH");
   const repoEnv = Deno.env.get("GITHUB_REPOSITORY"); // e.g. "owner/repo"
 
@@ -66,7 +68,7 @@ export async function getGitHubContext(): Promise<GitHubEventContext> {
   if (repoEnv && repoEnv.includes("/")) {
     [repoOwner, repoName] = repoEnv.split("/");
   } else {
-    const remoteInfo = await getRepoFromGitRemote();
+    const remoteInfo = await getRepoFromGitRemote(cwd);
     repoOwner = remoteInfo.repoOwner;
     repoName = remoteInfo.repoName;
   }
