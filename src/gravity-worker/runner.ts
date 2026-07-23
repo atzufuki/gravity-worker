@@ -27,6 +27,59 @@ export interface AgentRunner {
 }
 
 /**
+ * Uses Gemini API to dynamically generate natural, polite status comments in the exact language of the user's prompt.
+ */
+export async function generateAiMessage(
+  prompt: string,
+  messageType: "start" | "completion",
+): Promise<string> {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+
+  // Fallbacks if no API key is available
+  if (!apiKey) {
+    if (messageType === "start") {
+      return `I'm on it! 🚀 Starting work on this issue in a background worktree...`;
+    }
+    return `Task execution completed successfully! 🎉`;
+  }
+
+  const systemInstruction = messageType === "start"
+    ? `You are GravityWorker, a helpful AI coding assistant.
+Generate a friendly, concise 1-sentence acknowledgement that you are starting work on the user's issue in a background worktree.
+Include relevant emojis (e.g. 🚀).
+CRITICAL: Respond ONLY in the EXACT SAME LANGUAGE as the user's prompt (e.g., if prompt is in English, reply in English; if in Finnish, reply in Finnish; if in Swedish, reply in Swedish). Do NOT add extra explanations or quotes.`
+    : `You are GravityWorker, a helpful AI coding assistant.
+Generate a friendly 1-sentence completion greeting celebrating that the task was finished and a PR was created.
+Include relevant emojis (e.g. 🎉).
+CRITICAL: Respond ONLY in the EXACT SAME LANGUAGE as the user's prompt. Do NOT add extra explanations or quotes.`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemInstruction}\n\nUser Issue/Prompt: "${prompt}"` }] }],
+        }),
+      },
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (text) return text;
+    }
+  } catch {
+    // Ignore network error and use fallback
+  }
+
+  return messageType === "start"
+    ? `I'm on it! 🚀 Starting work on this issue in a background worktree...`
+    : `Task execution completed successfully! 🎉`;
+}
+
+/**
  * Direct Gemini API Agent Runner (Zero External Binary Dependencies)
  */
 export class GeminiRunner implements AgentRunner {

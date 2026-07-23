@@ -17,9 +17,9 @@ import {
   pushWorktreeBranch,
   removeWorktree,
 } from "@gravity-worker/git.ts";
-import { AgentRunnerFactory } from "@gravity-worker/runner.ts";
+import { AgentRunnerFactory, generateAiMessage } from "@gravity-worker/runner.ts";
 import { generateImplementationPlan, generateWalkthrough, saveArtifact } from "@gravity-worker/artifacts.ts";
-import { createPullRequest, getGitHubContext, isFinnishText, postIssueComment } from "@gravity-worker/github.ts";
+import { createPullRequest, getGitHubContext, postIssueComment } from "@gravity-worker/github.ts";
 import { getAppInstallationToken } from "@gravity-worker/github_app.ts";
 
 const VERSION = "0.1.0";
@@ -132,15 +132,10 @@ export async function main(args: string[] = Deno.args) {
         }
       }
 
-      // Detect language from prompt/issue text
-      const isFinnish = isFinnishText(prompt);
-
-      // 3. Post human-friendly start acknowledgement comment in matching language to GitHub Issue
+      // 3. Post AI-generated start acknowledgement comment in prompt's natural language
       if (githubToken && ghContext.repoOwner && ghContext.repoName && ghContext.issueNumber) {
-        console.log(`💬 Posting start acknowledgement comment to GitHub Issue #${ghContext.issueNumber}...`);
-        const startBody = isFinnish
-          ? `Otan tämän työn alle! 🚀 Työstän ratkaisua taustalla eristetyssä worktreessä (\`gravity-worker/${taskId}\`) ja avaan PR:n heti kun se on valmis.`
-          : `I'm on it! 🚀 Working on this issue in an isolated background worktree (\`gravity-worker/${taskId}\`). I'll open a PR as soon as it's ready.`;
+        console.log(`💬 Generating & posting start acknowledgement comment to GitHub Issue #${ghContext.issueNumber}...`);
+        const startBody = await generateAiMessage(prompt, "start");
 
         await postIssueComment({
           owner: ghContext.repoOwner,
@@ -218,16 +213,14 @@ export async function main(args: string[] = Deno.args) {
               console.log(`✓ Pull Request created: ${prUrl}`);
 
               if (ghContext.issueNumber) {
-                console.log(`💬 Posting completion comment to GitHub Issue #${ghContext.issueNumber}...`);
-                const completionIntro = isFinnish
-                  ? `Sain tehtävän valmiiksi! 🎉`
-                  : `I've completed this task! 🎉`;
+                console.log(`💬 Generating & posting completion comment to GitHub Issue #${ghContext.issueNumber}...`);
+                const completionGreeting = await generateAiMessage(prompt, "completion");
 
                 await postIssueComment({
                   owner: ghContext.repoOwner,
                   repo: ghContext.repoName,
                   issueNumber: ghContext.issueNumber,
-                  body: `${completionIntro}\n\n**Pull Request:** ${prUrl}\n\n${walkthroughContent}`,
+                  body: `${completionGreeting}\n\n**Pull Request:** ${prUrl}\n\n${walkthroughContent}`,
                   token: githubToken,
                 });
               }
