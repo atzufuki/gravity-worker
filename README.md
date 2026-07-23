@@ -8,9 +8,10 @@
 
 ## Key Features
 
-- **🚀 Universal & Agnostic:** Works with any AI engine (`agy` / Antigravity, Claude Code, Aider, custom LLMs) and any Git host (GitHub, GitLab, Forgejo).
+- **🚀 Universal & Agnostic:** Works with any AI engine (`agy` / Antigravity, Gemini API, Claude Code, Aider, custom LLMs) and any Git host (GitHub, GitLab, Forgejo).
 - **🌿 Git Worktree Isolation:** Runs every agent task in an isolated Git worktree so your primary working tree stays clean.
 - **⚡ Zero-Delay CI & Single Binary:** Compiles into a standalone single binary via `deno task compile` for fast startup without `node_modules` overhead.
+- **🤖 GitHub App Manifest Flow (`setup-app`):** Automated creation of `@gravity-worker[bot]` identity with custom avatar and permissions.
 - **🛠️ Built on Alexi:** Powered by Deno's Django-inspired framework for modular configuration and management commands.
 - **🔌 Native MCP & Agent Integration:** Includes `.agents/` configuration for Model Context Protocol (MCP) servers and agent skills.
 
@@ -18,7 +19,13 @@
 
 ## Quick Start
 
-### 1. Run via Deno
+### 1. Automated GitHub App Setup
+```bash
+# Register automated @gravity-worker[bot] GitHub App
+deno task start setup-app
+```
+
+### 2. Run Tasks via Deno
 ```bash
 # Display help and usage
 deno task start --help
@@ -30,7 +37,7 @@ deno task start run --prompt "Fix race condition in auth middleware"
 deno task start run --prompt "Refactor logger" --agent agy --dry-run
 ```
 
-### 2. Compile to Standalone Binary
+### 3. Compile to Standalone Binary
 ```bash
 # Build single binary
 deno task compile
@@ -39,7 +46,7 @@ deno task compile
 ./gravity-worker run --prompt "Refactor helper functions"
 ```
 
-### 3. Run Project Tests
+### 4. Run Project Tests
 ```bash
 deno task test
 ```
@@ -62,15 +69,17 @@ gravity-worker/
 │   ├── cli.ts            # CLI application entry point (@std/cli)
 │   ├── settings.ts       # Alexi project settings
 │   └── production.ts     # Production settings (DenoKV remote)
-├── manage.ts             # Alexi management CLI (worktrees, server)
+├── manage.ts             # Alexi management CLI (worktrees, setup_app)
 ├── deno.jsonc            # Deno workspace configuration & tasks
 ├── src/
 │   └── gravity-worker/   # Core GravityWorker app
 │       ├── mod.ts        # App module exports
 │       ├── git.ts        # Git Worktree management
-│       ├── runner.ts     # Agent runner engines (agy / custom)
+│       ├── runner.ts     # Agent runner engines (agy / gemini / custom)
 │       ├── artifacts.ts  # Antigravity markdown artifact generator
 │       ├── github.ts     # GitHub API & webhook payload handler
+│       ├── github_app.ts # GitHub App Manifest Flow & JWT Auth
+│       ├── commands/     # Alexi management commands (worktrees, setup_app)
 │       ├── views.ts      # Health & status endpoints
 │       └── urls.ts       # URL routing
 ├── .agents/              # MCP servers & agent skills
