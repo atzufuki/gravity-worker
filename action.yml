@@ -1,0 +1,65 @@
+name: 'Herkules Agent'
+description: 'Universal AI Agent Runner & Orchestrator for Git Worktrees & CI'
+branding:
+  icon: 'cpu'
+  color: 'purple'
+
+inputs:
+  prompt:
+    description: 'Instructions / Prompt for the AI agent'
+    required: false
+  agent:
+    description: 'AI agent engine to use (default: antigravity)'
+    required: false
+    default: 'antigravity'
+  issue-id:
+    description: 'GitHub Issue ID being processed'
+    required: false
+  github-token:
+    description: 'GitHub Token for posting comments and PRs'
+    required: false
+  gemini-api-key:
+    description: 'API key for Antigravity engine / Gemini API'
+    required: false
+  agy-credentials:
+    description: 'Antigravity CLI OAuth session token (JSON)'
+    required: false
+  app-id:
+    description: 'GitHub App ID for dedicated herkules[bot] identity'
+    required: false
+  private-key:
+    description: 'GitHub App Private Key for dedicated herkules[bot] identity'
+    required: false
+  proxy-url:
+    description: 'Local Antigravity execution proxy URL'
+    required: false
+
+outputs:
+  status:
+    description: 'Execution status (success or failure)'
+  branch:
+    description: 'Created Git worktree branch name'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Deno Environment
+      uses: denoland/setup-deno@v2
+      with:
+        deno-version: v2.x
+
+    - name: Run Herkules CLI
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+        AGY_CREDENTIALS: ${{ inputs.agy-credentials }}
+        HERKULES_APP_ID: ${{ inputs.app-id }}
+        HERKULES_PRIVATE_KEY: ${{ inputs.private-key }}
+        HERKULES_PROXY_URL: ${{ inputs.proxy-url }}
+      run: |
+        deno run -A ${{ github.action_path }}/src/cli/cli.ts run \
+          --prompt "${{ inputs.prompt }}" \
+          --agent "${{ inputs.agent }}" \
+          --issue "${{ inputs.issue-id }}" \
+          --proxy "${{ inputs.proxy-url }}"

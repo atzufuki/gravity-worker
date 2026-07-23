@@ -1,0 +1,97 @@
+name: Herkules Agent Automation
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Task instructions for Herkules'
+        required: true
+      agent:
+        description: 'Agent engine (default: antigravity)'
+        required: false
+        default: 'antigravity'
+
+jobs:
+  herkules:
+    if: >-
+      (github.event_name == 'issues' && github.event.label.name == 'herkules') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@herkules')) ||
+      (github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Configure Git Bot Identity
+        run: |
+          git config --global user.name "herkules[bot]"
+          git config --global user.email "4375516+herkules[bot]@users.noreply.github.com"
+
+      - name: Fetch Keyless Herkules App Token from Relay
+        id: fetch-relay-token
+        run: |
+          RELAY_URL="${{ secrets.HERKULES_RELAY_URL || 'https://herkules.atzufuki.deno.net' }}"
+          echo "Fetching keyless App Token from Herkules Relay ($RELAY_URL)..."
+          TOKEN_RES=$(curl -s -L "$RELAY_URL/api/token?owner=${{ github.repository_owner }}&repo=${{ github.event.repository.name }}" || echo "{}")
+          TOKEN=$(echo "$TOKEN_RES" | grep -o '"token":"[^"]*' | cut -d'"' -f4 || echo "")
+          if [ -n "$TOKEN" ]; then
+            echo "token=$TOKEN" >> $GITHUB_OUTPUT
+            echo "✓ Keyless App Token minted successfully from Herkules Relay!"
+          else
+            echo "⚠️ Relay response: $TOKEN_RES"
+            echo "ℹ️ Relay token minting skipped or offline. Falling back to local secrets/token."
+          fi
+        continue-on-error: true
+
+      - name: Generate Herkules GitHub App Token (Fallback)
+        id: generate-app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.HERKULES_APP_ID || '4375516' }}
+          private-key: ${{ secrets.HERKULES_PRIVATE_KEY }}
+        continue-on-error: true
+
+      - name: Check Local Antigravity Proxy Tunnel Availability
+        id: check-proxy
+        run: |
+          RELAY_URL="${{ secrets.HERKULES_RELAY_URL || 'https://herkules.atzufuki.deno.net' }}"
+          TUNNEL_URL="${RELAY_URL}/tunnel/${{ github.repository }}"
+          echo "Checking Herkules local proxy tunnel at $TUNNEL_URL/health..."
+          STATUS=$(curl -s -L -k -H "User-Agent: Herkules" -o /dev/null -w "%{http_code}" --max-time 5 "$TUNNEL_URL/health" || echo "000")
+          if [ "$STATUS" = "200" ]; then
+            echo "proxy_online=true" >> $GITHUB_OUTPUT
+            echo "proxy_url=$TUNNEL_URL" >> $GITHUB_OUTPUT
+            echo "✓ Local Antigravity Proxy Tunnel is ONLINE!"
+          else
+            echo "proxy_online=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ Local tunnel offline (HTTP $STATUS). Running natively in Cloud Gemini API."
+          fi
+
+      - name: Run Herkules Agent
+        uses: atzufuki/herkules@main
+        with:
+          prompt: ${{ github.event.inputs.prompt || github.event.issue.title || github.event.comment.body }}
+          agent: ${{ github.event.inputs.agent || 'antigravity' }}
+          issue-id: ${{ github.event.issue.number }}
+          github-token: ${{ steps.fetch-relay-token.outputs.token || steps.generate-app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          app-id: ${{ secrets.HERKULES_APP_ID || '4375516' }}
+          private-key: ${{ secrets.HERKULES_PRIVATE_KEY }}
+          proxy-url: ${{ steps.check-proxy.outputs.proxy_online == 'true' && steps.check-proxy.outputs.proxy_url || '' }}
