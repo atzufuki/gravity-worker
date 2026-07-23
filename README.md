@@ -1,0 +1,77 @@
+# GravityWorker
+
+**GravityWorker** is a universal, lightweight AI Agent Runner & Orchestrator designed for Git Worktrees, CI/CD pipelines (such as GitHub Actions), and local background automation. Built with [Deno](https://deno.com) and the [Alexi](https://github.com/atzufuki/alexi) framework.
+
+> **Philosophy:** *GravityWorker absorbs and carries the heavy lifting ("gravity") of routine software engineering tasks—running tests, inspecting codebases, executing background fixes—so developers can enjoy frictionless flow ("Antigravity").*
+
+---
+
+## Key Features
+
+- **🚀 Universal & Agnostic:** Works with any AI engine (`agy` / Antigravity, Claude Code, Aider, custom LLMs) and any Git host (GitHub, GitLab, Forgejo).
+- **🌿 Git Worktree Isolation:** Runs every agent task in an isolated Git worktree so your primary working tree stays clean.
+- **⚡ Zero-Delay CI & Single Binary:** Compiles into a standalone single binary via `deno task compile` for fast startup without `node_modules` overhead.
+- **🛠️ Built on Alexi:** Powered by Deno's Django-inspired framework for modular configuration and management commands.
+- **🔌 Native MCP & Agent Integration:** Includes `.agents/` configuration for Model Context Protocol (MCP) servers and agent skills.
+
+---
+
+## Quick Start
+
+### 1. Run via Deno
+```bash
+# Display help and usage
+deno task start --help
+
+# Execute a prompt in an isolated worktree
+deno task start run --prompt "Fix race condition in auth middleware"
+
+# Run in dry-run mode
+deno task start run --prompt "Refactor logger" --agent agy --dry-run
+```
+
+### 2. Compile to Standalone Binary
+```bash
+# Build single binary
+deno task compile
+
+# Run compiled binary
+./gravity-worker run --prompt "Refactor helper functions"
+```
+
+### 3. Run Project Tests
+```bash
+deno task test
+```
+
+---
+
+## Project Structure
+
+```text
+gravity-worker/
+├── project/
+│   ├── cli.ts            # CLI application entry point (@std/cli)
+│   ├── settings.ts       # Alexi project settings
+│   └── production.ts     # Production settings (DenoKV remote)
+├── manage.ts             # Alexi management CLI (worktrees, server)
+├── deno.jsonc            # Deno workspace configuration & tasks
+├── src/
+│   └── gravity-worker/   # Core GravityWorker app
+│       ├── mod.ts        # App module exports
+│       ├── git.ts        # Git Worktree management
+│       ├── runner.ts     # Agent runner engines (agy / custom)
+│       ├── artifacts.ts  # Antigravity markdown artifact generator
+│       ├── github.ts     # GitHub API & webhook payload handler
+│       ├── views.ts      # Health & status endpoints
+│       └── urls.ts       # URL routing
+├── .agents/              # MCP servers & agent skills
+└── .zed/                 # Zed editor configuration
+```
+
+---
+
+## Learn More
+
+- [Alexi Framework](https://github.com/atzufuki/alexi)
+- [Antigravity Documentation](https://antigravity.google/docs)
