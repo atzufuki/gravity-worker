@@ -1,22 +1,9 @@
 /**
- * GravityWorker Alexi Management Commands
+ * GravityWorker Command Module Registry
  *
  * @module gravity-worker/commands
  */
 
-import { ListWorktreesCommand } from "./list_worktrees.ts";
-import { CleanWorktreesCommand } from "./clean_worktrees.ts";
-import { InstallCommand } from "./install.ts";
-import { UninstallCommand } from "./uninstall.ts";
-
-export const gravity_worker_commands = [
-  ListWorktreesCommand,
-  CleanWorktreesCommand,
-  InstallCommand,
-  UninstallCommand,
-];
-
-export * from "./list_worktrees.ts";
-export * from "./clean_worktrees.ts";
-export * from "./install.ts";
-export * from "./uninstall.ts";
+export { InstallCommand } from "@gravity-worker/commands/install.ts";
+export { UninstallCommand } from "@gravity-worker/commands/uninstall.ts";
+export { ServerCommand } from "@gravity-worker/commands/server.ts";

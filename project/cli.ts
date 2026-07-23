@@ -33,8 +33,9 @@ USAGE:
   gravity-worker <command> [options]
 
 COMMANDS:
-  run          Execute an agent task (default)
-  install      Automated installation & setup of @gravity-worker[bot] GitHub App
+  server       Start local daemon to listen for GitHub 'gravity-fix' labels and run tasks locally (Google AI Ultra)
+  run          Execute a single agent task locally or in CI
+  install      Setup GravityWorker for GitHub Actions CI or Local Workstations
   uninstall    Remove GravityWorker workflow & secrets from target repository
   status       Check status of current worker / worktrees
   version      Print version information
@@ -53,20 +54,17 @@ OPTIONS:
   -v, --version          Show version
 
 EXAMPLES:
-  # Automated 100% Zero-Touch Installation for current repository
+  # Start local daemon to watch GitHub repository and run tasks locally using Antigravity (agy / Google AI Ultra)
+  gravity-worker server --repo atzufuki/siht.io
+
+  # Automated Installation Wizard (GitHub Actions CI or Local Workstation)
   gravity-worker install
-
-  # Automated Installation with custom GEMINI_API_KEY
-  gravity-worker install --repo atzufuki/siht.io --key YOUR_GEMINI_API_KEY
-
-  # Uninstall GravityWorker from target repository
-  gravity-worker uninstall --repo /var/home/atzufuki/Code/siht.io
 
   # Run a prompt locally in an isolated worktree
   gravity-worker run --prompt "Fix bug in auth middleware"
 
-  # Process a specific GitHub issue with custom agent
-  gravity-worker run --issue 42 --agent agy
+  # Process a specific GitHub issue with Antigravity engine
+  gravity-worker run --issue 48 --agent antigravity
 `);
 }
 
@@ -102,6 +100,13 @@ export async function main(args: string[] = Deno.args) {
   }
 
   switch (command) {
+    case "server": {
+      const { ServerCommand } = await import("@gravity-worker/commands/server.ts");
+      const cmd = new ServerCommand();
+      const res = await cmd.handle(flags);
+      Deno.exit(res.exitCode);
+      break;
+    }
     case "install": {
       const { InstallCommand } = await import("@gravity-worker/commands/install.ts");
       const cmd = new InstallCommand();
