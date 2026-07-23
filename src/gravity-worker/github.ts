@@ -2,13 +2,14 @@
  * GravityWorker - GitHub API & Event Handler Module
  *
  * Handles parsing GitHub Action event payloads, posting comments to issues,
- * language detection, and creating Pull Requests via GitHub REST API.
+ * adding reactions (e.g. 👀 eyes emoji), language detection, and creating Pull Requests via GitHub REST API.
  *
  * @module gravity-worker/github
  */
 
 export interface GitHubEventContext {
   issueNumber?: number;
+  commentId?: number;
   issueTitle?: string;
   issueBody?: string;
   repoOwner?: string;
@@ -79,10 +80,12 @@ export async function getGitHubContext(): Promise<GitHubEventContext> {
     const payload = JSON.parse(text);
 
     const issue = payload.issue;
+    const comment = payload.comment;
     const sender = payload.sender?.login;
 
     return {
       issueNumber: issue?.number,
+      commentId: comment?.id,
       issueTitle: issue?.title,
       issueBody: issue?.body,
       repoOwner,
@@ -92,6 +95,42 @@ export async function getGitHubContext(): Promise<GitHubEventContext> {
   } catch (err) {
     console.warn(`[GravityWorker] Unable to parse GITHUB_EVENT_PATH:`, err);
     return { repoOwner, repoName };
+  }
+}
+
+/**
+ * Adds an emoji reaction (default: "eyes" 👀) to a GitHub issue or issue comment.
+ */
+export async function addReactionToIssueOrComment(
+  options: {
+    owner: string;
+    repo: string;
+    issueNumber: number;
+    commentId?: number;
+    reaction?: string;
+    token: string;
+  },
+): Promise<boolean> {
+  const { owner, repo, issueNumber, commentId, reaction = "eyes", token } = options;
+  const url = commentId
+    ? `https://api.github.com/repos/${owner}/${repo}/issues/comments/${commentId}/reactions`
+    : `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/reactions`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Accept": "application/vnd.github.v3+json",
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "User-Agent": "GravityWorker",
+      },
+      body: JSON.stringify({ content: reaction }),
+    });
+
+    return response.ok;
+  } catch {
+    return false;
   }
 }
 

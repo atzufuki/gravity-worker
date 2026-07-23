@@ -19,7 +19,7 @@ import {
 } from "@gravity-worker/git.ts";
 import { AgentRunnerFactory, generateAiMessage } from "@gravity-worker/runner.ts";
 import { generateImplementationPlan, generateWalkthrough, saveArtifact } from "@gravity-worker/artifacts.ts";
-import { createPullRequest, getGitHubContext, postIssueComment } from "@gravity-worker/github.ts";
+import { addReactionToIssueOrComment, createPullRequest, getGitHubContext, postIssueComment } from "@gravity-worker/github.ts";
 import { getAppInstallationToken } from "@gravity-worker/github_app.ts";
 
 const VERSION = "0.1.0";
@@ -132,8 +132,18 @@ export async function main(args: string[] = Deno.args) {
         }
       }
 
-      // 3. Post AI-generated start acknowledgement comment in prompt's natural language
+      // 3. React with 👀 (eyes emoji) immediately & post AI-generated start acknowledgement comment
       if (githubToken && ghContext.repoOwner && ghContext.repoName && ghContext.issueNumber) {
+        console.log(`👀 Reacting with eyes emoji to GitHub Issue #${ghContext.issueNumber}...`);
+        await addReactionToIssueOrComment({
+          owner: ghContext.repoOwner,
+          repo: ghContext.repoName,
+          issueNumber: ghContext.issueNumber,
+          commentId: ghContext.commentId,
+          reaction: "eyes",
+          token: githubToken,
+        });
+
         console.log(`💬 Generating & posting start acknowledgement comment to GitHub Issue #${ghContext.issueNumber}...`);
         const startBody = await generateAiMessage(prompt, "start");
 
