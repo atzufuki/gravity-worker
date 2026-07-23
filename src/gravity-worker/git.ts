@@ -126,7 +126,7 @@ export async function hasChanges(worktreePath: string): Promise<boolean> {
 }
 
 /**
- * Commits all changes in a worktree.
+ * Commits code changes in a worktree, excluding report artifacts.
  */
 export async function commitWorktreeChanges(
   worktreePath: string,
@@ -137,6 +137,8 @@ export async function commitWorktreeChanges(
   await runGit(["config", "user.name", botName], worktreePath);
   await runGit(["config", "user.email", botEmail], worktreePath);
   await runGit(["add", "-A"], worktreePath);
+  // Ensure artifact report files are excluded from commit
+  await runGit(["reset", "HEAD", "--", "implementation_plan.md", "walkthrough.md"], worktreePath).catch(() => {});
   await runGit(["commit", "-m", message], worktreePath);
 }
 

@@ -4,6 +4,10 @@
 bin/
 dist/
 
+# Antigravity Artifacts (reports, not codebase changes)
+implementation_plan.md
+walkthrough.md
+
 # Worktree isolation
 .worktrees/
 

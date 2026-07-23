@@ -103,13 +103,28 @@ export async function main(args: string[] = Deno.args) {
         Deno.exit(1);
       }
 
-      // 2. Create isolated Worktree
+      // 2. Post initial start acknowledgement comment to GitHub Issue if running in CI
+      const githubToken = Deno.env.get("GITHUB_TOKEN");
+      const ghContext = await getGitHubContext();
+
+      if (githubToken && ghContext.repoOwner && ghContext.repoName && ghContext.issueNumber) {
+        console.log(`💬 Posting start acknowledgement comment to GitHub Issue #${ghContext.issueNumber}...`);
+        await postIssueComment({
+          owner: ghContext.repoOwner,
+          repo: ghContext.repoName,
+          issueNumber: ghContext.issueNumber,
+          body: `🤖 **GravityWorker** is starting work on this task in background worktree \`gravity-worker/${taskId}\`...`,
+          token: githubToken,
+        });
+      }
+
+      // 3. Create isolated Worktree
       console.log(`\n🌿 Creating Git Worktree for branch gravity-worker/${taskId}...`);
       const worktree = await createWorktree({ taskId });
       console.log(`✓ Worktree ready at: ${worktree.worktreePath}`);
 
       try {
-        // 3. Save Implementation Plan Artifact
+        // 4. Save Implementation Plan Artifact (for workspace/reporting, excluded from git commit)
         console.log(`\n📝 Generating implementation_plan.md artifact...`);
         const planContent = generateImplementationPlan({
           taskId,
@@ -118,7 +133,7 @@ export async function main(args: string[] = Deno.args) {
         });
         await saveArtifact(worktree.worktreePath, "implementation_plan.md", planContent);
 
-        // 4. Run Agent
+        // 5. Run Agent
         console.log(`\n🤖 Executing agent (${flags.agent})...`);
         const runner = AgentRunnerFactory.getRunner(flags.agent);
         const result = await runner.run({
@@ -127,10 +142,10 @@ export async function main(args: string[] = Deno.args) {
           dryRun: flags["dry-run"],
         });
 
-        // 5. Get Diff before committing
+        // 6. Get Diff before committing
         const diff = await getWorktreeDiff(worktree.worktreePath).catch(() => "");
 
-        // 6. Save Walkthrough Artifact
+        // 7. Save Walkthrough Artifact (for workspace/reporting, excluded from git commit)
         console.log(`📝 Generating walkthrough.md artifact...`);
         const walkthroughContent = generateWalkthrough({
           taskId,
@@ -142,7 +157,7 @@ export async function main(args: string[] = Deno.args) {
         });
         await saveArtifact(worktree.worktreePath, "walkthrough.md", walkthroughContent);
 
-        // 7. Commit & Push Worktree Changes if modified & success
+        // 8. Commit & Push Worktree Changes if modified & success (artifacts implementation_plan.md and walkthrough.md are automatically excluded)
         if (result.success && !flags["dry-run"] && await hasChanges(worktree.worktreePath)) {
           console.log(`\n📤 Committing & pushing branch ${worktree.branchName}...`);
           await commitWorktreeChanges(worktree.worktreePath, `Fix #${taskId}: ${prompt}`);
@@ -150,19 +165,19 @@ export async function main(args: string[] = Deno.args) {
             console.warn(`[Git Push Warning] ${e.message}`);
           });
 
-          // 8. Create GitHub Pull Request & Comment if token and GitHub context are available
-          const githubToken = Deno.env.get("GITHUB_TOKEN");
-          const ghContext = await getGitHubContext();
-
+          // 9. Create GitHub Pull Request linked with "Closes #issue" & Comment
           if (githubToken && ghContext.repoOwner && ghContext.repoName) {
             console.log(`\n🔀 Creating GitHub Pull Request...`);
+            const closesKeyword = ghContext.issueNumber ? `\n\nCloses #${ghContext.issueNumber}` : "";
+            const prBody = `${walkthroughContent}${closesKeyword}`;
+
             const prUrl = await createPullRequest({
               owner: ghContext.repoOwner,
               repo: ghContext.repoName,
               head: worktree.branchName,
               base: "main",
               title: `[GravityWorker] Fix #${taskId}: ${prompt}`,
-              body: walkthroughContent,
+              body: prBody,
               token: githubToken,
             });
 
@@ -170,7 +185,7 @@ export async function main(args: string[] = Deno.args) {
               console.log(`✓ Pull Request created: ${prUrl}`);
 
               if (ghContext.issueNumber) {
-                console.log(`💬 Posting status comment to GitHub Issue #${ghContext.issueNumber}...`);
+                console.log(`💬 Posting completion comment to GitHub Issue #${ghContext.issueNumber}...`);
                 await postIssueComment({
                   owner: ghContext.repoOwner,
                   repo: ghContext.repoName,
@@ -183,7 +198,7 @@ export async function main(args: string[] = Deno.args) {
           }
         }
 
-        // 9. Result Summary
+        // 10. Result Summary
         console.log(`\n✨ Task #${taskId} ${result.success ? "COMPLETED" : "FAILED"} in ${(result.durationMs / 1000).toFixed(2)}s`);
         console.log(`- Branch: ${worktree.branchName}`);
         console.log(`- Worktree: ${worktree.worktreePath}`);
