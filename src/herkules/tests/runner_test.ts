@@ -57,3 +57,26 @@ PORT=8000
     await Deno.remove(tempDir, { recursive: true }).catch(() => {});
   }
 });
+
+Deno.test("Runner Module - fallback file write in deep nested subdirectories", async () => {
+  const tempDir = await Deno.makeTempDir({ prefix: "herkules_nested_test_" });
+  try {
+    const prompt = "Create src/commands/types.ts with type definitions";
+    const agentOutput = `Here is the requested file:
+
+\`\`\`ts
+export interface CommandOptions {
+  name: string;
+}
+\`\`\`
+`;
+
+    const applied = await applyFallbackFileWrites(prompt, agentOutput, tempDir);
+    assertEquals(applied, true);
+
+    const writtenContent = await Deno.readTextFile(`${tempDir}/src/commands/types.ts`);
+    assertEquals(writtenContent.includes("export interface CommandOptions"), true);
+  } finally {
+    await Deno.remove(tempDir, { recursive: true }).catch(() => {});
+  }
+});

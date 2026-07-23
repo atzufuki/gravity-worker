@@ -6,7 +6,7 @@
  * @module herkules/runner
  */
 
-import { join } from "@std/path";
+import { dirname, join } from "@std/path";
 
 export interface RunOptions {
   prompt: string;
@@ -43,7 +43,7 @@ export async function applyFallbackFileWrites(
   if (lowerPrompt.includes(".env.example") || lowerPrompt.includes(".env")) {
     targetFilename = ".env.example";
   } else {
-    const fileMatch = prompt.match(/([a-zA-Z0-9_-]+\.[a-zA-Z0-9]+)/);
+    const fileMatch = prompt.match(/([a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*\.[a-zA-Z0-9]+)/);
     if (fileMatch) {
       targetFilename = fileMatch[1];
     }
@@ -80,6 +80,8 @@ ANTHROPIC_API_KEY=your_anthropic_api_key_here
 
   if (fileContent && fileContent.length > 0) {
     const targetPath = join(worktreePath, targetFilename);
+    const parentDir = dirname(targetPath);
+    await Deno.mkdir(parentDir, { recursive: true });
     await Deno.writeTextFile(targetPath, fileContent + "\n");
     console.log(`✨ Applied file write for ${targetFilename}: ${targetPath}`);
     return true;
@@ -258,7 +260,9 @@ Summarize what you accomplished concisely.`;
           const actions = JSON.parse(jsonMatch[1]);
           for (const item of actions) {
             if (item.action === "write" && item.path && item.content) {
-              const fullPath = `${worktreePath}/${item.path}`;
+              const fullPath = join(worktreePath, item.path);
+              const parentDir = dirname(fullPath);
+              await Deno.mkdir(parentDir, { recursive: true });
               await Deno.writeTextFile(fullPath, item.content);
               console.log(`[GeminiRunner] Applied file change: ${item.path}`);
             }

@@ -12,11 +12,48 @@
  * @module cli/commands/proxy
  */
 
+import { dirname, join } from "@std/path";
 import { BaseCommand } from "@alexi/core/management";
 import { AntigravityRunner, applyFallbackFileWrites } from "@herkules/runner.ts";
 import { setRepoSecretWithGh } from "@herkules/github_app.ts";
 import { getGitHubContext } from "@herkules/github.ts";
+import { createWorktree, removeWorktree } from "@herkules/git.ts";
 import { handleTokenRelayRequest, TunnelMessage, TunnelResponse } from "@web/relay.ts";
+
+/**
+ * Recursively scans directory to collect modified and new text files.
+ */
+export async function collectModifiedFiles(dirPath: string): Promise<Record<string, string>> {
+  const files: Record<string, string> = {};
+
+  async function walkDir(currentDir: string) {
+    try {
+      for await (const entry of Deno.readDir(currentDir)) {
+        if (entry.name === ".git" || entry.name === ".worktrees" || entry.name === "node_modules") {
+          continue;
+        }
+        const fullPath = join(currentDir, entry.name);
+        const relPath = fullPath.substring(dirPath.length + 1);
+
+        if (entry.isDirectory) {
+          await walkDir(fullPath);
+        } else if (entry.isFile) {
+          try {
+            const content = await Deno.readTextFile(fullPath);
+            files[relPath] = content;
+          } catch {
+            // Ignore binary files or read errors
+          }
+        }
+      }
+    } catch {
+      // Ignore readDir error
+    }
+  }
+
+  await walkDir(dirPath);
+  return files;
+}
 
 export interface ProxyExecuteRequest {
   prompt: string;
@@ -208,29 +245,37 @@ export class ProxyCommand extends BaseCommand {
             console.log(`\n🎯 Received proxy execution request for Issue #${body.issueNum ?? "N/A"}`);
             console.log(`  Prompt: "${body.prompt.substring(0, 80)}..."`);
 
-            // Create temporary worktree directory for execution
-            const tempDir = await Deno.makeTempDir({ prefix: "herkules-proxy-" });
-            const runner = new AntigravityRunner();
-            const result = await runner.run({ prompt: body.prompt, worktreePath: tempDir });
+            // 1. Create an isolated Git Worktree for execution
+            const taskId = `proxy-${body.issueNum ?? Date.now()}`;
+            let worktreePath = "";
+            let worktreeObj: any = null;
 
-            // Collect modified files
-            const files: Record<string, string> = {};
-            await applyFallbackFileWrites(body.prompt, result.output, tempDir);
-
-            // Read generated files from tempDir
-            for await (const entry of Deno.readDir(tempDir)) {
-              if (entry.isFile && !entry.name.startsWith(".")) {
-                try {
-                  const content = await Deno.readTextFile(`${tempDir}/${entry.name}`);
-                  files[entry.name] = content;
-                } catch {
-                  // Ignore binary files
-                }
-              }
+            try {
+              worktreeObj = await createWorktree({ taskId, prompt: body.prompt }, targetDir);
+              worktreePath = worktreeObj.worktreePath;
+            } catch {
+              // Fallback to temp directory if not running inside a git repo
+              worktreePath = await Deno.makeTempDir({ prefix: "herkules-proxy-worktree-" });
             }
 
-            // Cleanup temp directory
-            await Deno.remove(tempDir, { recursive: true }).catch(() => {});
+            let result: { success: boolean; output: string; durationMs: number; error?: string };
+            try {
+              const runner = new AntigravityRunner();
+              result = await runner.run({ prompt: body.prompt, worktreePath });
+              await applyFallbackFileWrites(body.prompt, result.output, worktreePath);
+            } finally {
+              // File collection runs next
+            }
+
+            // 2. Recursively collect generated/modified files from worktree
+            const files = await collectModifiedFiles(worktreePath);
+
+            // 3. Safely clean up temporary worktree
+            if (worktreeObj) {
+              await removeWorktree(worktreeObj, { deleteBranch: true }).catch(() => {});
+            } else if (worktreePath) {
+              await Deno.remove(worktreePath, { recursive: true }).catch(() => {});
+            }
 
             console.log(`✓ Proxy execution completed successfully. (${Object.keys(files).length} files generated)`);
 

@@ -109,3 +109,18 @@ jobs:
 - **AI-Powered Multilingual Status Messages:** Generates friendly status updates in the exact language of the user's issue prompt.
 - **Automated Pull Requests:** Opens a PR against `main` containing code changes and links the PR to automatically close the issue using `Closes #<issue>`.
 - **Clean Workspace Isolation:** Saves reports to `.herkules/` and strictly excludes report artifacts from being committed into your repository's code history.
+
+---
+
+## 💬 Interactive Comment Commands
+
+Mention `@herkules` in any GitHub issue or PR comment to trigger interactive agent sub-commands:
+
+| Command | Example Usage | Action & Output |
+| :--- | :--- | :--- |
+| **`plan`** | `@herkules plan Add JWT auth middleware` | Generates an implementation plan (`.herkules/implementation_plan.md`) & posts comment without mutating codebase. |
+| **`update`** | `@herkules update Add tests for edge cases` | Updates existing worktree branch & PR with new requirements and posts update summary. |
+| **`review`** | `@herkules review Check for security issues` | Performs automated code review (`.herkules/review.md`) & posts detailed quality report comment. |
+| **`retry`** | `@herkules retry` | Re-runs task execution from scratch with a fresh worktree and updates PR. |
+| **`run`** | `@herkules Refactor logger` | Standard task execution (default when no command keyword is specified). |
+

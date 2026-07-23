@@ -19,10 +19,11 @@ import {
   removeWorktree,
 } from "@herkules/git.ts";
 import { AgentRunnerFactory, applyFallbackFileWrites, generateAiMessage } from "@herkules/runner.ts";
-import { generateImplementationPlan, generateWalkthrough, saveArtifact } from "@herkules/artifacts.ts";
+import { generateCodeReview, generateImplementationPlan, generateWalkthrough, saveArtifact } from "@herkules/artifacts.ts";
 import { addReactionToIssueOrComment, createPullRequest, getGitHubContext, getRepoFromGitRemote, postIssueComment } from "@herkules/github.ts";
 import { getAppInstallationToken, loadEnvFiles } from "@herkules/github_app.ts";
 import { generateConventionalMetadata } from "@herkules/conventional.ts";
+import { formatCommandResponse, parseCommentCommand } from "@herkules/commands.ts";
 
 const VERSION = "0.1.0";
 
@@ -221,8 +222,16 @@ export async function main(args: string[] = Deno.args) {
 
       const issueNum = ghContext.issueNumber ?? (flags.issue ? parseInt(flags.issue, 10) : undefined);
 
+      // Parse interactive comment commands (@herkules plan, update, review, retry)
+      const parsedCmd = parseCommentCommand(prompt);
+      const effectivePrompt = parsedCmd.prompt || ghContext.issueTitle || prompt;
+
+      if (parsedCmd.isMentioned) {
+        console.log(`- Interactive Comment Command: @herkules ${parsedCmd.command}`);
+      }
+
       // Generate Conventional Commits metadata (feat/fix branch, commit msg, PR title)
-      const conventional = generateConventionalMetadata(prompt, issueNum);
+      const conventional = generateConventionalMetadata(effectivePrompt, issueNum);
 
       // 3. React with 👀 (eyes emoji) immediately & post AI-generated start acknowledgement comment
       if (githubToken && ghContext.repoOwner && ghContext.repoName && issueNum) {
@@ -237,7 +246,7 @@ export async function main(args: string[] = Deno.args) {
         }).catch(() => {});
 
         console.log(`💬 Generating & posting start acknowledgement comment to GitHub Issue #${issueNum}...`);
-        const startBody = await generateAiMessage(prompt, "start");
+        const startBody = await generateAiMessage(effectivePrompt, "start");
 
         await postIssueComment({
           owner: ghContext.repoOwner,
@@ -250,7 +259,11 @@ export async function main(args: string[] = Deno.args) {
 
       // 4. Create isolated Worktree inside targetDir using Conventional Branch Naming (e.g. feat/48-slug)
       console.log(`\n🌿 Creating Git Worktree for task #${taskId}...`);
-      const worktree = await createWorktree({ taskId, prompt, issueNumber: issueNum }, targetDir);
+      const reuseBranch = parsedCmd.command === "update";
+      const worktree = await createWorktree(
+        { taskId, prompt: effectivePrompt, issueNumber: issueNum, reuseBranch },
+        targetDir,
+      );
       console.log(`✓ Worktree ready at: ${worktree.worktreePath} (branch: ${worktree.branchName})`);
 
       try {
@@ -258,10 +271,36 @@ export async function main(args: string[] = Deno.args) {
         console.log(`\n📝 Generating implementation_plan.md artifact...`);
         const planContent = generateImplementationPlan({
           taskId,
-          prompt,
+          prompt: effectivePrompt,
           agentName: flags.agent,
         });
         await saveArtifact(worktree.worktreePath, ".herkules/implementation_plan.md", planContent);
+
+        // Handle @herkules plan command early exit (plan-only generation)
+        if (parsedCmd.command === "plan") {
+          console.log(`📋 Processed @herkules plan command.`);
+          const planCmdRes = formatCommandResponse("plan", {
+            prompt: effectivePrompt,
+            content: planContent,
+            issueNumber: issueNum,
+          });
+
+          if (githubToken && ghContext.repoOwner && ghContext.repoName && issueNum) {
+            await postIssueComment({
+              owner: ghContext.repoOwner,
+              repo: ghContext.repoName,
+              issueNumber: issueNum,
+              body: planCmdRes.body,
+              token: githubToken,
+            }).catch(() => {});
+          }
+
+          console.log(`\n✨ Plan generation COMPLETED.`);
+          if (!flags["keep-worktree"]) {
+            await removeWorktree(worktree, { deleteBranch: true });
+          }
+          break;
+        }
 
         // 6. Run Agent (either via Proxy or natively)
         const proxyUrl = flags.proxy ?? Deno.env.get("HERKULES_PROXY_URL") ?? Deno.env.get("GRAVITY_WORKER_PROXY_URL");
@@ -280,7 +319,7 @@ export async function main(args: string[] = Deno.args) {
               },
               signal: AbortSignal.timeout(300000),
               body: JSON.stringify({
-                prompt,
+                prompt: effectivePrompt,
                 issueNum,
                 repoSpec,
               }),
@@ -309,7 +348,7 @@ export async function main(args: string[] = Deno.args) {
             console.log("⚡ Falling back to native agent execution in CI...");
             const runner = AgentRunnerFactory.getRunner(flags.agent);
             result = await runner.run({
-              prompt,
+              prompt: effectivePrompt,
               worktreePath: worktree.worktreePath,
               dryRun: flags["dry-run"],
             });
@@ -318,7 +357,7 @@ export async function main(args: string[] = Deno.args) {
           console.log(`\n🤖 Executing agent (${flags.agent})...`);
           const runner = AgentRunnerFactory.getRunner(flags.agent);
           result = await runner.run({
-            prompt,
+            prompt: effectivePrompt,
             worktreePath: worktree.worktreePath,
             dryRun: flags["dry-run"],
           });
@@ -327,23 +366,58 @@ export async function main(args: string[] = Deno.args) {
         // Verify if files were edited; if not, apply fallback file extraction from output
         let codeChangesExist = await hasChanges(worktree.worktreePath);
         if (!codeChangesExist && result.output) {
-          await applyFallbackFileWrites(prompt, result.output, worktree.worktreePath);
+          await applyFallbackFileWrites(effectivePrompt, result.output, worktree.worktreePath);
         }
 
         // 7. Get Diff before committing
         const diff = await getWorktreeDiff(worktree.worktreePath).catch(() => "");
 
-        // 8. Save Walkthrough Artifact in hidden .herkules/ (isolated from target repo commits)
-        console.log(`📝 Generating walkthrough.md artifact...`);
+        // 8. Save Artifacts (.herkules/walkthrough.md & .herkules/review.md)
+        console.log(`📝 Generating artifacts...`);
         const walkthroughContent = generateWalkthrough({
           taskId,
-          prompt,
+          prompt: effectivePrompt,
           agentName: flags.agent,
           output: result.output || (result.success ? "Execution completed successfully." : "Execution failed."),
           diff,
           durationMs: result.durationMs,
         });
         await saveArtifact(worktree.worktreePath, ".herkules/walkthrough.md", walkthroughContent);
+
+        const reviewContent = generateCodeReview({
+          taskId,
+          prompt: effectivePrompt,
+          agentName: flags.agent,
+          diff,
+          output: result.output,
+        });
+        await saveArtifact(worktree.worktreePath, ".herkules/review.md", reviewContent);
+
+        // Handle @herkules review command
+        if (parsedCmd.command === "review") {
+          console.log(`🔍 Processed @herkules review command.`);
+          const reviewCmdRes = formatCommandResponse("review", {
+            prompt: effectivePrompt,
+            content: reviewContent,
+            issueNumber: issueNum,
+          });
+
+          if (githubToken && ghContext.repoOwner && ghContext.repoName && issueNum) {
+            await postIssueComment({
+              owner: ghContext.repoOwner,
+              repo: ghContext.repoName,
+              issueNumber: issueNum,
+              body: reviewCmdRes.body,
+              token: githubToken,
+            }).catch(() => {});
+          }
+
+          console.log(`\n✨ Code review COMPLETED.`);
+          if (!flags["keep-worktree"]) {
+            await removeWorktree(worktree, { deleteBranch: true });
+          }
+          break;
+        }
 
         // 9. Commit & Push Worktree Changes using Conventional Commits format
         if (result.success && !flags["dry-run"]) {
@@ -381,13 +455,22 @@ export async function main(args: string[] = Deno.args) {
 
               if (issueNum) {
                 console.log(`💬 Generating & posting completion comment to GitHub Issue #${issueNum}...`);
-                const completionGreeting = await generateAiMessage(prompt, "completion");
+                const completionGreeting = await generateAiMessage(effectivePrompt, "completion");
+
+                const cmdRes = formatCommandResponse(parsedCmd.command, {
+                  prompt: effectivePrompt,
+                  content: walkthroughContent,
+                  prUrl,
+                  issueNumber: issueNum,
+                });
+
+                const commentBody = `${completionGreeting}\n\n${cmdRes.body}`;
 
                 await postIssueComment({
                   owner: ghContext.repoOwner,
                   repo: ghContext.repoName,
                   issueNumber: issueNum,
-                  body: `${completionGreeting}\n\n**Pull Request:** ${prUrl}\n\n${walkthroughContent}`,
+                  body: commentBody,
                   token: githubToken,
                 }).catch(() => {});
               }

@@ -17,6 +17,7 @@
 - **⚡ Zero-Delay CI & Single Binary:** Compiles into a standalone single binary via `deno task compile` for fast startup without `node_modules` overhead.
 - **☁️ Deno Deploy & Keyless Token Relay:** Built-in Django-style web application ready for edge deployment to Deno Deploy with DenoKV database and WebSocket execution tunnels.
 - **🤖 GitHub App Manifest Flow (`install`):** Automated creation of `@herkules[bot]` identity with custom avatar and permissions.
+- **💬 Interactive Comment Commands:** Mention `@herkules plan`, `update`, `review`, or `retry` in GitHub comments for real-time task control.
 - **🛠️ Built on Alexi:** Powered by Deno's Django-inspired framework for modular configuration and management commands.
 - **🔌 Native MCP & Agent Integration:** Includes `.agents/` configuration for Model Context Protocol (MCP) servers and agent skills.
 
