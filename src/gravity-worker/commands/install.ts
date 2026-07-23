@@ -1,11 +1,11 @@
 /**
- * Alexi Management Command: setup_app
+ * Alexi Management Command: install
  *
- * Automated 100% Zero-Touch GitHub Setup for GravityWorker.
+ * Automated 100% Zero-Touch GitHub Setup & Installation for GravityWorker.
  * Creates GitHub App via auto-submitted manifest POST form, configures workflow permissions,
  * injects secrets, commits workflow file, and launches App Installation in browser.
  *
- * @module gravity-worker/commands/setup_app
+ * @module gravity-worker/commands/install
  */
 
 import { BaseCommand } from "@alexi/core/management";
@@ -31,14 +31,14 @@ function openBrowser(url: string) {
   }
 }
 
-export class SetupAppCommand extends BaseCommand {
-  override name = "setup_app";
-  override help = "100% Zero-Touch Automated Setup of GravityWorker for GitHub";
+export class InstallCommand extends BaseCommand {
+  override name = "install";
+  override help = "100% Zero-Touch Automated Setup & Installation of GravityWorker for GitHub";
 
   override async handle(options?: any): Promise<{ exitCode: number }> {
     const targetRepoFlag = typeof options === "string" ? options : options?.repo;
 
-    console.log("🤖 Starting 100% Automated Zero-Touch GravityWorker Setup...\n");
+    console.log("🤖 Starting 100% Automated Zero-Touch GravityWorker Installation...\n");
 
     let repoSpec: string | undefined;
     let targetDir = ".";
@@ -170,7 +170,7 @@ export class SetupAppCommand extends BaseCommand {
       }
 
       console.log("\n=======================================================");
-      console.log("✨ 100% ZERO-TOUCH SETUP COMPLETE!");
+      console.log("✨ 100% ZERO-TOUCH INSTALLATION COMPLETE!");
       console.log("=======================================================");
       console.log(`GravityWorker is ready to process issues on ${repoSpec ?? "your repository"}.`);
       console.log(`Ensure the GitHub App is installed on ${repoSpec ?? "your repository"}.`);
@@ -179,7 +179,7 @@ export class SetupAppCommand extends BaseCommand {
       return { exitCode: 0 };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`❌ Setup failed: ${msg}`);
+      console.error(`❌ Installation failed: ${msg}`);
       return { exitCode: 1 };
     }
   }

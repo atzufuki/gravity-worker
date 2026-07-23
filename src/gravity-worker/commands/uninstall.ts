@@ -1,16 +1,16 @@
 /**
- * Alexi Management Command: remove_app
+ * Alexi Management Command: uninstall
  *
  * Removes GravityWorker configuration, workflow files, secrets, and worktrees from target repository.
  *
- * @module gravity-worker/commands/remove_app
+ * @module gravity-worker/commands/uninstall
  */
 
 import { BaseCommand } from "@alexi/core/management";
 import { getRepoFromGitRemote } from "@gravity-worker/github.ts";
 
-export class RemoveAppCommand extends BaseCommand {
-  override name = "remove_app";
+export class UninstallCommand extends BaseCommand {
+  override name = "uninstall";
   override help = "Removes GravityWorker workflow, secrets, and worktrees from a target repository";
 
   override async handle(options?: any): Promise<{ exitCode: number }> {

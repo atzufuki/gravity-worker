@@ -34,8 +34,8 @@ USAGE:
 
 COMMANDS:
   run          Execute an agent task (default)
-  setup-app    Automated creation of @gravity-worker[bot] GitHub App
-  remove-app   Uninstall GravityWorker workflow & secrets (alias: clean-app)
+  install      Automated installation & setup of @gravity-worker[bot] GitHub App (alias: setup-app)
+  uninstall    Remove GravityWorker workflow & secrets (aliases: remove-app, clean-app)
   status       Check status of current worker / worktrees
   version      Print version information
   help         Print this help message
@@ -52,14 +52,14 @@ OPTIONS:
   -v, --version          Show version
 
 EXAMPLES:
-  # Automated GitHub App setup for current repository
-  gravity-worker setup-app
+  # Automated 100% Zero-Touch Installation for current repository
+  gravity-worker install
 
-  # Automated GitHub App setup for specific repository or local path
-  gravity-worker setup-app --repo atzufuki/siht.io
+  # Automated Installation for specific repository or local path
+  gravity-worker install --repo atzufuki/siht.io
 
   # Uninstall / clean GravityWorker from target repository
-  gravity-worker remove-app --repo /var/home/atzufuki/Code/siht.io
+  gravity-worker uninstall --repo /var/home/atzufuki/Code/siht.io
 
   # Run a prompt locally in an isolated worktree
   gravity-worker run --prompt "Fix bug in auth middleware"
@@ -100,17 +100,19 @@ export async function main(args: string[] = Deno.args) {
   }
 
   switch (command) {
+    case "install":
     case "setup-app": {
-      const { SetupAppCommand } = await import("@gravity-worker/commands/setup_app.ts");
-      const cmd = new SetupAppCommand();
+      const { InstallCommand } = await import("@gravity-worker/commands/install.ts");
+      const cmd = new InstallCommand();
       const res = await cmd.handle(flags.repo);
       Deno.exit(res.exitCode);
       break;
     }
+    case "uninstall":
     case "remove-app":
     case "clean-app": {
-      const { RemoveAppCommand } = await import("@gravity-worker/commands/remove_app.ts");
-      const cmd = new RemoveAppCommand();
+      const { UninstallCommand } = await import("@gravity-worker/commands/uninstall.ts");
+      const cmd = new UninstallCommand();
       const res = await cmd.handle(flags.repo);
       Deno.exit(res.exitCode);
       break;
