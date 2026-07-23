@@ -24,8 +24,20 @@ export class SetupAppCommand extends BaseCommand {
   override async handle(): Promise<{ exitCode: number }> {
     console.log("🤖 Starting 100% Automated Zero-Touch GravityWorker Setup...\n");
 
+    // Detect target repository context from local git remote or environment
+    const ghContext = await getGitHubContext();
+    const repoSpec = (ghContext.repoOwner && ghContext.repoName)
+      ? `${ghContext.repoOwner}/${ghContext.repoName}`
+      : undefined;
+
+    if (repoSpec) {
+      console.log(`📌 Target repository detected: ${repoSpec}\n`);
+    } else {
+      console.log("📌 Target repository: Local working directory\n");
+    }
+
     // 1. Generate & Open GitHub App Manifest URL
-    const manifestUrl = getManifestUrl();
+    const manifestUrl = getManifestUrl({ appName: repoSpec ? `gravity-worker-${ghContext.repoName}` : "gravity-worker" });
     console.log("1️⃣ Opening browser for single-click GitHub App creation...");
     console.log(`   URL: ${manifestUrl}\n`);
 
@@ -55,13 +67,13 @@ export class SetupAppCommand extends BaseCommand {
       console.log(`✓ Workflow file generated at: ${workflowPath}`);
 
       // 3. Automate Secret Injection via gh CLI
-      console.log("\n4️⃣ Injecting repository secrets (GRAVITY_WORKER_APP_ID & GRAVITY_WORKER_PRIVATE_KEY)...");
-      const appSaved = await setRepoSecretWithGh("GRAVITY_WORKER_APP_ID", creds.appId);
-      const keySaved = await setRepoSecretWithGh("GRAVITY_WORKER_PRIVATE_KEY", creds.privateKey);
+      console.log(`\n4️⃣ Injecting repository secrets to ${repoSpec ?? "current repository"}...`);
+      const appSaved = await setRepoSecretWithGh("GRAVITY_WORKER_APP_ID", creds.appId, repoSpec);
+      const keySaved = await setRepoSecretWithGh("GRAVITY_WORKER_PRIVATE_KEY", creds.privateKey, repoSpec);
 
       const geminiEnvKey = Deno.env.get("GEMINI_API_KEY");
       if (geminiEnvKey) {
-        await setRepoSecretWithGh("GEMINI_API_KEY", geminiEnvKey);
+        await setRepoSecretWithGh("GEMINI_API_KEY", geminiEnvKey, repoSpec);
         console.log("✓ Injected GEMINI_API_KEY from local environment.");
       }
 
@@ -72,7 +84,6 @@ export class SetupAppCommand extends BaseCommand {
       }
 
       // 4. Automate Workflow Permissions via API / gh CLI
-      const ghContext = await getGitHubContext();
       if (ghContext.repoOwner && ghContext.repoName) {
         console.log(`\n5️⃣ Enabling PR creation permissions for ${ghContext.repoOwner}/${ghContext.repoName}...`);
         const token = Deno.env.get("GITHUB_TOKEN");
@@ -87,7 +98,7 @@ export class SetupAppCommand extends BaseCommand {
       console.log("\n=======================================================");
       console.log("✨ 100% ZERO-TOUCH SETUP COMPLETE!");
       console.log("=======================================================");
-      console.log("GravityWorker is ready to process issues on your repo.");
+      console.log(`GravityWorker is ready to process issues on ${repoSpec ?? "your repository"}.`);
       console.log("Add the 'gravity-fix' label to any issue to begin!\n");
 
       return { exitCode: 0 };

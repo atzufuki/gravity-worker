@@ -17,7 +17,34 @@ export interface GitHubEventContext {
 }
 
 /**
- * Parses GitHub event payload from environment (GITHUB_EVENT_PATH & GITHUB_REPOSITORY).
+ * Parses repository owner and name from local git remote.origin.url.
+ */
+export async function getRepoFromGitRemote(cwd = "."): Promise<{ repoOwner?: string; repoName?: string }> {
+  try {
+    const cmd = new Deno.Command("git", {
+      args: ["config", "--get", "remote.origin.url"],
+      cwd,
+      stdout: "piped",
+      stderr: "piped",
+    });
+    const output = await cmd.output();
+    if (!output.success) return {};
+
+    const remoteUrl = new TextDecoder().decode(output.stdout).trim();
+    // Handles git@github.com:owner/repo.git or https://github.com/owner/repo.git
+    const match = remoteUrl.match(/github\.com[:/]([^/]+)\/([^/.]+)(?:\.git)?$/);
+    if (match) {
+      return { repoOwner: match[1], repoName: match[2] };
+    }
+  } catch {
+    // Ignore git command errors
+  }
+  return {};
+}
+
+/**
+ * Parses GitHub event payload from environment (GITHUB_EVENT_PATH & GITHUB_REPOSITORY),
+ * with fallback to local Git remote origin URL.
  */
 export async function getGitHubContext(): Promise<GitHubEventContext> {
   const eventPath = Deno.env.get("GITHUB_EVENT_PATH");
@@ -28,6 +55,10 @@ export async function getGitHubContext(): Promise<GitHubEventContext> {
 
   if (repoEnv && repoEnv.includes("/")) {
     [repoOwner, repoName] = repoEnv.split("/");
+  } else {
+    const remoteInfo = await getRepoFromGitRemote();
+    repoOwner = remoteInfo.repoOwner;
+    repoName = remoteInfo.repoName;
   }
 
   if (!eventPath) {
