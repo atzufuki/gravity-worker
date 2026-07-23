@@ -42,13 +42,18 @@ runs:
       with:
         deno-version: v2.x
 
-    - name: Check Antigravity CLI (agy)
+    - name: Setup Antigravity CLI (agy)
       shell: bash
       run: |
-        if command -v agy &> /dev/null; then
-          echo "✓ Antigravity CLI (agy) detected on runner."
-        else
-          echo "ℹ️ 'agy' binary not found in runner PATH. GravityWorker will run via Gemini API Engine."
+        if ! command -v agy &> /dev/null; then
+          echo "🚀 Installing official Antigravity CLI (agy)..."
+          curl -fsSL https://antigravity.google/cli/install.sh | bash || true
+          if [ -d "$HOME/.local/bin" ]; then
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
+          fi
+          if [ -d "$HOME/.antigravity/bin" ]; then
+            echo "$HOME/.antigravity/bin" >> $GITHUB_PATH
+          fi
         fi
 
     - name: Run GravityWorker CLI
