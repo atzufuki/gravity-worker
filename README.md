@@ -46,10 +46,18 @@ deno task test
 
 ---
 
+## Documentation
+
+- **[GitHub Integration & Setup Guide](docs/github.md):** Complete guide for setting up GravityWorker in GitHub Actions repositories (permissions, secrets, workflow configuration).
+
+---
+
 ## Project Structure
 
 ```text
 gravity-worker/
+├── docs/
+│   └── github.md         # GitHub Integration & Setup Guide
 ├── project/
 │   ├── cli.ts            # CLI application entry point (@std/cli)
 │   ├── settings.ts       # Alexi project settings
