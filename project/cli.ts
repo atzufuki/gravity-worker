@@ -42,6 +42,7 @@ OPTIONS:
   -p, --prompt <text>    Instructions for the AI agent
   -a, --agent <name>     AI agent engine to use (default: "antigravity")
   -i, --issue <number>   GitHub / Git issue ID to process
+  -r, --repo <spec/dir>  Target GitHub repository (owner/repo or local directory)
   -w, --worktree [name]  Run in an isolated Git worktree (default: true)
       --keep-worktree    Keep worktree directory after execution
       --dry-run          Simulate execution without making changes
@@ -49,8 +50,12 @@ OPTIONS:
   -v, --version          Show version
 
 EXAMPLES:
-  # Automated GitHub App setup
+  # Automated GitHub App setup for current repository
   gravity-worker setup-app
+
+  # Automated GitHub App setup for specific repository or local path
+  gravity-worker setup-app --repo atzufuki/siht.io
+  gravity-worker setup-app --repo /var/home/atzufuki/Code/siht.io
 
   # Run a prompt locally in an isolated worktree
   gravity-worker run --prompt "Fix bug in auth middleware"
@@ -69,9 +74,10 @@ export async function main(args: string[] = Deno.args) {
       a: "agent",
       i: "issue",
       w: "worktree",
+      r: "repo",
     },
     boolean: ["help", "version", "dry-run", "keep-worktree"],
-    string: ["prompt", "agent", "issue", "worktree"],
+    string: ["prompt", "agent", "issue", "worktree", "repo"],
     default: {
       agent: "antigravity",
     },
@@ -93,7 +99,7 @@ export async function main(args: string[] = Deno.args) {
     case "setup-app": {
       const { SetupAppCommand } = await import("@gravity-worker/commands/setup_app.ts");
       const cmd = new SetupAppCommand();
-      const res = await cmd.handle();
+      const res = await cmd.handle(flags.repo);
       Deno.exit(res.exitCode);
       break;
     }

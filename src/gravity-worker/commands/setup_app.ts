@@ -15,29 +15,56 @@ import {
   listenForManifestCallback,
   setRepoSecretWithGh,
 } from "@gravity-worker/github_app.ts";
-import { getGitHubContext } from "@gravity-worker/github.ts";
+import { getGitHubContext, getRepoFromGitRemote } from "@gravity-worker/github.ts";
 
 export class SetupAppCommand extends BaseCommand {
   override name = "setup_app";
   override help = "100% Zero-Touch Automated Setup of GravityWorker for GitHub";
 
-  override async handle(): Promise<{ exitCode: number }> {
+  override async handle(options?: any): Promise<{ exitCode: number }> {
+    const targetRepoFlag = typeof options === "string" ? options : options?.repo;
+
     console.log("🤖 Starting 100% Automated Zero-Touch GravityWorker Setup...\n");
 
-    // Detect target repository context from local git remote or environment
-    const ghContext = await getGitHubContext();
-    const repoSpec = (ghContext.repoOwner && ghContext.repoName)
-      ? `${ghContext.repoOwner}/${ghContext.repoName}`
-      : undefined;
+    let repoSpec: string | undefined;
+    let targetDir = ".";
+
+    if (targetRepoFlag) {
+      // Check if targetRepoFlag is a local directory path
+      try {
+        const stat = await Deno.stat(targetRepoFlag);
+        if (stat.isDirectory) {
+          targetDir = targetRepoFlag;
+          const remoteInfo = await getRepoFromGitRemote(targetDir);
+          if (remoteInfo.repoOwner && remoteInfo.repoName) {
+            repoSpec = `${remoteInfo.repoOwner}/${remoteInfo.repoName}`;
+          }
+        }
+      } catch {
+        // Not a local directory, assume it's owner/repo format
+        if (targetRepoFlag.includes("/")) {
+          repoSpec = targetRepoFlag;
+        }
+      }
+    }
+
+    if (!repoSpec) {
+      const ghContext = await getGitHubContext();
+      if (ghContext.repoOwner && ghContext.repoName) {
+        repoSpec = `${ghContext.repoOwner}/${ghContext.repoName}`;
+      }
+    }
 
     if (repoSpec) {
-      console.log(`📌 Target repository detected: ${repoSpec}\n`);
+      console.log(`📌 Target repository detected: ${repoSpec}`);
+      console.log(`📂 Target directory: ${targetDir}\n`);
     } else {
-      console.log("📌 Target repository: Local working directory\n");
+      console.log(`📌 Target directory: ${targetDir}\n`);
     }
 
     // 1. Generate & Open GitHub App Manifest URL
-    const manifestUrl = getManifestUrl({ appName: repoSpec ? `gravity-worker-${ghContext.repoName}` : "gravity-worker" });
+    const manifestAppName = repoSpec ? `gravity-worker-${repoSpec.split("/")[1] ?? "app"}` : "gravity-worker";
+    const manifestUrl = getManifestUrl({ appName: manifestAppName });
     console.log("1️⃣ Opening browser for single-click GitHub App creation...");
     console.log(`   URL: ${manifestUrl}\n`);
 
@@ -62,8 +89,8 @@ export class SetupAppCommand extends BaseCommand {
       console.log(`- App ID:   ${creds.appId}`);
 
       // 2. Automate .github/workflows/gravity-worker.yml file generation
-      console.log("\n3️⃣ Generating .github/workflows/gravity-worker.yml in target repository...");
-      const workflowPath = await createWorkflowFile(".");
+      console.log(`\n3️⃣ Generating .github/workflows/gravity-worker.yml in ${targetDir}...`);
+      const workflowPath = await createWorkflowFile(targetDir);
       console.log(`✓ Workflow file generated at: ${workflowPath}`);
 
       // 3. Automate Secret Injection via gh CLI
@@ -84,13 +111,16 @@ export class SetupAppCommand extends BaseCommand {
       }
 
       // 4. Automate Workflow Permissions via API / gh CLI
-      if (ghContext.repoOwner && ghContext.repoName) {
-        console.log(`\n5️⃣ Enabling PR creation permissions for ${ghContext.repoOwner}/${ghContext.repoName}...`);
-        const token = Deno.env.get("GITHUB_TOKEN");
-        if (token) {
-          const permOk = await enableRepoWorkflowPermissions(ghContext.repoOwner, ghContext.repoName, token);
-          if (permOk) {
-            console.log("✓ Repository workflow permissions updated automatically!");
+      if (repoSpec) {
+        const [owner, repo] = repoSpec.split("/");
+        if (owner && repo) {
+          console.log(`\n5️⃣ Enabling PR creation permissions for ${owner}/${repo}...`);
+          const token = Deno.env.get("GITHUB_TOKEN");
+          if (token) {
+            const permOk = await enableRepoWorkflowPermissions(owner, repo, token);
+            if (permOk) {
+              console.log("✓ Repository workflow permissions updated automatically!");
+            }
           }
         }
       }
