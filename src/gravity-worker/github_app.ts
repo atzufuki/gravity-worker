@@ -437,6 +437,7 @@ jobs:
           issue-id: \${{ github.event.issue.number }}
           github-token: \${{ secrets.GITHUB_TOKEN }}
           gemini-api-key: \${{ secrets.GEMINI_API_KEY }}
+          agy-credentials: \${{ secrets.AGY_CREDENTIALS }}
           app-id: \${{ secrets.GRAVITY_WORKER_APP_ID }}
           private-key: \${{ secrets.GRAVITY_WORKER_PRIVATE_KEY }}
 `;

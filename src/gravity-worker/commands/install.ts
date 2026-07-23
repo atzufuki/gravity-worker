@@ -3,7 +3,8 @@
  *
  * Automated 100% Zero-Touch GitHub Setup & Installation for GravityWorker.
  * Creates GitHub App via auto-submitted manifest POST form, configures workflow permissions,
- * injects secrets, commits workflow file, and launches App Installation in browser.
+ * injects secrets (including AGY_CREDENTIALS & GEMINI_API_KEY), commits workflow file,
+ * and launches App Installation in browser.
  *
  * @module gravity-worker/commands/install
  */
@@ -29,6 +30,31 @@ function openBrowser(url: string) {
   } catch {
     // Ignore browser open errors
   }
+}
+
+async function resolveAgyCredentials(): Promise<string | undefined> {
+  let creds = Deno.env.get("AGY_CREDENTIALS");
+  if (creds) return creds;
+
+  const home = Deno.env.get("HOME") ?? "";
+  const possiblePaths = [
+    `${home}/.config/antigravity/credentials.json`,
+    `${home}/.gemini/antigravity-cli/credentials.json`,
+    `${home}/.config/Antigravity/credentials.json`,
+  ];
+
+  for (const path of possiblePaths) {
+    try {
+      const content = await Deno.readTextFile(path);
+      if (content.trim().startsWith("{")) {
+        return content.trim();
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  return undefined;
 }
 
 async function resolveGeminiApiKey(options?: any, targetDir = "."): Promise<string | undefined> {
@@ -173,13 +199,18 @@ export class InstallCommand extends BaseCommand {
       const appSaved = await setRepoSecretWithGh("GRAVITY_WORKER_APP_ID", creds.appId, repoSpec);
       const keySaved = await setRepoSecretWithGh("GRAVITY_WORKER_PRIVATE_KEY", creds.privateKey, repoSpec);
 
+      // Check & Inject AGY_CREDENTIALS
+      const agyCreds = await resolveAgyCredentials();
+      if (agyCreds) {
+        await setRepoSecretWithGh("AGY_CREDENTIALS", agyCreds, repoSpec);
+        console.log("✓ Injected AGY_CREDENTIALS (Antigravity CLI OAuth Token) to repository secrets.");
+      }
+
+      // Check & Inject GEMINI_API_KEY
       const geminiApiKey = await resolveGeminiApiKey(options, targetDir);
       if (geminiApiKey) {
         await setRepoSecretWithGh("GEMINI_API_KEY", geminiApiKey, repoSpec);
         console.log("✓ Injected GEMINI_API_KEY to repository secrets.");
-      } else {
-        console.log("\n⚠️ Note: GEMINI_API_KEY environment variable was not found in shell or .env file.");
-        console.log(`   To inject it on GitHub, run: gh secret set GEMINI_API_KEY -b <YOUR_KEY> --repo ${repoSpec ?? "owner/repo"}`);
       }
 
       if (appSaved && keySaved) {

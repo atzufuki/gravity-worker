@@ -21,6 +21,9 @@ inputs:
   gemini-api-key:
     description: 'API key for Antigravity engine / Gemini API'
     required: false
+  agy-credentials:
+    description: 'Antigravity CLI OAuth session token (JSON)'
+    required: false
   app-id:
     description: 'GitHub App ID for dedicated gravity-worker[bot] identity'
     required: false
@@ -44,6 +47,8 @@ runs:
 
     - name: Setup Antigravity CLI (agy)
       shell: bash
+      env:
+        AGY_CREDENTIALS: ${{ inputs.agy-credentials }}
       run: |
         if ! command -v agy &> /dev/null; then
           echo "🚀 Installing official Antigravity CLI (agy)..."
@@ -56,11 +61,19 @@ runs:
           fi
         fi
 
+        if [ -n "$AGY_CREDENTIALS" ]; then
+          echo "🔑 Restoring Antigravity CLI OAuth session token..."
+          mkdir -p "$HOME/.config/antigravity" "$HOME/.gemini/antigravity-cli"
+          echo "$AGY_CREDENTIALS" > "$HOME/.config/antigravity/credentials.json"
+          echo "$AGY_CREDENTIALS" > "$HOME/.gemini/antigravity-cli/credentials.json"
+        fi
+
     - name: Run GravityWorker CLI
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+        AGY_CREDENTIALS: ${{ inputs.agy-credentials }}
         GRAVITY_WORKER_APP_ID: ${{ inputs.app-id }}
         GRAVITY_WORKER_PRIVATE_KEY: ${{ inputs.private-key }}
       run: |
