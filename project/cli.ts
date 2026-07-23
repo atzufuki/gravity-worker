@@ -8,9 +8,18 @@
  */
 
 import { parseArgs } from "@std/cli/parse-args";
-import { createWorktree, getWorktreeDiff, isGitRepository, removeWorktree } from "@gravity-worker/git.ts";
+import {
+  commitWorktreeChanges,
+  createWorktree,
+  getWorktreeDiff,
+  hasChanges,
+  isGitRepository,
+  pushWorktreeBranch,
+  removeWorktree,
+} from "@gravity-worker/git.ts";
 import { AgentRunnerFactory } from "@gravity-worker/runner.ts";
 import { generateImplementationPlan, generateWalkthrough, saveArtifact } from "@gravity-worker/artifacts.ts";
+import { createPullRequest, getGitHubContext, postIssueComment } from "@gravity-worker/github.ts";
 
 const VERSION = "0.1.0";
 
@@ -118,7 +127,7 @@ export async function main(args: string[] = Deno.args) {
           dryRun: flags["dry-run"],
         });
 
-        // 5. Get Diff
+        // 5. Get Diff before committing
         const diff = await getWorktreeDiff(worktree.worktreePath).catch(() => "");
 
         // 6. Save Walkthrough Artifact
@@ -133,7 +142,48 @@ export async function main(args: string[] = Deno.args) {
         });
         await saveArtifact(worktree.worktreePath, "walkthrough.md", walkthroughContent);
 
-        // 7. Result Summary
+        // 7. Commit & Push Worktree Changes if modified & success
+        if (result.success && !flags["dry-run"] && await hasChanges(worktree.worktreePath)) {
+          console.log(`\n📤 Committing & pushing branch ${worktree.branchName}...`);
+          await commitWorktreeChanges(worktree.worktreePath, `Fix #${taskId}: ${prompt}`);
+          await pushWorktreeBranch(worktree.worktreePath, worktree.branchName).catch((e) => {
+            console.warn(`[Git Push Warning] ${e.message}`);
+          });
+
+          // 8. Create GitHub Pull Request & Comment if token and GitHub context are available
+          const githubToken = Deno.env.get("GITHUB_TOKEN");
+          const ghContext = await getGitHubContext();
+
+          if (githubToken && ghContext.repoOwner && ghContext.repoName) {
+            console.log(`\n🔀 Creating GitHub Pull Request...`);
+            const prUrl = await createPullRequest({
+              owner: ghContext.repoOwner,
+              repo: ghContext.repoName,
+              head: worktree.branchName,
+              base: "main",
+              title: `[GravityWorker] Fix #${taskId}: ${prompt}`,
+              body: walkthroughContent,
+              token: githubToken,
+            });
+
+            if (prUrl) {
+              console.log(`✓ Pull Request created: ${prUrl}`);
+
+              if (ghContext.issueNumber) {
+                console.log(`💬 Posting status comment to GitHub Issue #${ghContext.issueNumber}...`);
+                await postIssueComment({
+                  owner: ghContext.repoOwner,
+                  repo: ghContext.repoName,
+                  issueNumber: ghContext.issueNumber,
+                  body: `🤖 **GravityWorker** has completed this task!\n\n**Pull Request:** ${prUrl}\n\n${walkthroughContent}`,
+                  token: githubToken,
+                });
+              }
+            }
+          }
+        }
+
+        // 9. Result Summary
         console.log(`\n✨ Task #${taskId} ${result.success ? "COMPLETED" : "FAILED"} in ${(result.durationMs / 1000).toFixed(2)}s`);
         console.log(`- Branch: ${worktree.branchName}`);
         console.log(`- Worktree: ${worktree.worktreePath}`);

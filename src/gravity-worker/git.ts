@@ -124,3 +124,29 @@ export async function hasChanges(worktreePath: string): Promise<boolean> {
   const status = await runGit(["status", "--porcelain"], worktreePath);
   return status.length > 0;
 }
+
+/**
+ * Commits all changes in a worktree.
+ */
+export async function commitWorktreeChanges(
+  worktreePath: string,
+  message: string,
+  botName = "gravity-worker[bot]",
+  botEmail = "gravity-worker[bot]@users.noreply.github.com",
+): Promise<void> {
+  await runGit(["config", "user.name", botName], worktreePath);
+  await runGit(["config", "user.email", botEmail], worktreePath);
+  await runGit(["add", "-A"], worktreePath);
+  await runGit(["commit", "-m", message], worktreePath);
+}
+
+/**
+ * Pushes worktree branch to remote repository.
+ */
+export async function pushWorktreeBranch(
+  worktreePath: string,
+  branchName: string,
+  remote = "origin",
+): Promise<void> {
+  await runGit(["push", "-u", remote, branchName], worktreePath);
+}
