@@ -7,7 +7,7 @@
  */
 
 import { BaseCommand } from "@alexi/core/management";
-import { getGitHubContext, getRepoFromGitRemote } from "@gravity-worker/github.ts";
+import { getRepoFromGitRemote } from "@gravity-worker/github.ts";
 
 export class RemoveAppCommand extends BaseCommand {
   override name = "remove_app";
@@ -25,10 +25,6 @@ export class RemoveAppCommand extends BaseCommand {
         const stat = await Deno.stat(targetRepoFlag);
         if (stat.isDirectory) {
           targetDir = targetRepoFlag;
-          const remoteInfo = await getRepoFromGitRemote(targetDir);
-          if (remoteInfo.repoOwner && remoteInfo.repoName) {
-            repoSpec = `${remoteInfo.repoOwner}/${remoteInfo.repoName}`;
-          }
         }
       } catch {
         if (targetRepoFlag.includes("/")) {
@@ -37,11 +33,9 @@ export class RemoveAppCommand extends BaseCommand {
       }
     }
 
-    if (!repoSpec) {
-      const ghContext = await getGitHubContext();
-      if (ghContext.repoOwner && ghContext.repoName) {
-        repoSpec = `${ghContext.repoOwner}/${ghContext.repoName}`;
-      }
+    const remoteInfo = await getRepoFromGitRemote(targetDir);
+    if (remoteInfo.repoOwner && remoteInfo.repoName) {
+      repoSpec = `${remoteInfo.repoOwner}/${remoteInfo.repoName}`;
     }
 
     if (repoSpec) {
@@ -49,12 +43,47 @@ export class RemoveAppCommand extends BaseCommand {
       console.log(`📂 Target directory: ${targetDir}\n`);
     }
 
-    // 1. Remove workflow file
-    const workflowPath = `${targetDir}/.github/workflows/gravity-worker.yml`;
+    // 1. Remove workflow file locally and from git tracking
+    const workflowRelativePath = ".github/workflows/gravity-worker.yml";
+    const workflowPath = `${targetDir}/${workflowRelativePath}`;
     try {
-      await Deno.remove(workflowPath);
-      console.log(`✓ Removed workflow file: ${workflowPath}`);
+      // Try git rm first
+      const gitRmCmd = new Deno.Command("git", {
+        args: ["rm", "-f", workflowRelativePath],
+        cwd: targetDir,
+        stdout: "piped",
+        stderr: "piped",
+      });
+      const gitRmRes = await gitRmCmd.output();
+
+      if (gitRmRes.success) {
+        console.log(`✓ Removed workflow file from Git tracking: ${workflowPath}`);
+
+        // Commit and push removal
+        const commitCmd = new Deno.Command("git", {
+          args: ["commit", "-m", "Remove GravityWorker workflow"],
+          cwd: targetDir,
+          stdout: "piped",
+          stderr: "piped",
+        });
+        await commitCmd.output();
+
+        const pushCmd = new Deno.Command("git", {
+          args: ["push", "origin", "HEAD"],
+          cwd: targetDir,
+          stdout: "piped",
+          stderr: "piped",
+        });
+        const pushRes = await pushCmd.output();
+        if (pushRes.success) {
+          console.log(`✓ Pushed workflow removal to remote GitHub repository.`);
+        }
+      } else {
+        await Deno.remove(workflowPath).catch(() => {});
+        console.log(`✓ Removed local workflow file: ${workflowPath}`);
+      }
     } catch {
+      await Deno.remove(workflowPath).catch(() => {});
       console.log(`ℹ️ Workflow file not found at: ${workflowPath}`);
     }
 
