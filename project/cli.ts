@@ -103,7 +103,7 @@ export async function main(args: string[] = Deno.args) {
         Deno.exit(1);
       }
 
-      // 2. Post initial start acknowledgement comment to GitHub Issue if running in CI
+      // 2. Post human-friendly start acknowledgement comment to GitHub Issue if running in CI
       const githubToken = Deno.env.get("GITHUB_TOKEN");
       const ghContext = await getGitHubContext();
 
@@ -113,7 +113,7 @@ export async function main(args: string[] = Deno.args) {
           owner: ghContext.repoOwner,
           repo: ghContext.repoName,
           issueNumber: ghContext.issueNumber,
-          body: `🤖 **GravityWorker** is starting work on this task in background worktree \`gravity-worker/${taskId}\`...`,
+          body: `Otan tämän työn alle! 🚀 Työstän ratkaisua taustalla eristetyssä worktreessä (\`gravity-worker/${taskId}\`) ja avaan PR:n heti kun se on valmis.`,
           token: githubToken,
         });
       }
@@ -124,14 +124,14 @@ export async function main(args: string[] = Deno.args) {
       console.log(`✓ Worktree ready at: ${worktree.worktreePath}`);
 
       try {
-        // 4. Save Implementation Plan Artifact (for workspace/reporting, excluded from git commit)
+        // 4. Save Implementation Plan Artifact in hidden .gravity-worker/ (isolated from target repo commits)
         console.log(`\n📝 Generating implementation_plan.md artifact...`);
         const planContent = generateImplementationPlan({
           taskId,
           prompt,
           agentName: flags.agent,
         });
-        await saveArtifact(worktree.worktreePath, "implementation_plan.md", planContent);
+        await saveArtifact(worktree.worktreePath, ".gravity-worker/implementation_plan.md", planContent);
 
         // 5. Run Agent
         console.log(`\n🤖 Executing agent (${flags.agent})...`);
@@ -145,7 +145,7 @@ export async function main(args: string[] = Deno.args) {
         // 6. Get Diff before committing
         const diff = await getWorktreeDiff(worktree.worktreePath).catch(() => "");
 
-        // 7. Save Walkthrough Artifact (for workspace/reporting, excluded from git commit)
+        // 7. Save Walkthrough Artifact in hidden .gravity-worker/ (isolated from target repo commits)
         console.log(`📝 Generating walkthrough.md artifact...`);
         const walkthroughContent = generateWalkthrough({
           taskId,
@@ -155,9 +155,9 @@ export async function main(args: string[] = Deno.args) {
           diff,
           durationMs: result.durationMs,
         });
-        await saveArtifact(worktree.worktreePath, "walkthrough.md", walkthroughContent);
+        await saveArtifact(worktree.worktreePath, ".gravity-worker/walkthrough.md", walkthroughContent);
 
-        // 8. Commit & Push Worktree Changes if modified & success (artifacts implementation_plan.md and walkthrough.md are automatically excluded)
+        // 8. Commit & Push Worktree Changes if modified & success (artifacts in .gravity-worker/ are strictly excluded from commit)
         if (result.success && !flags["dry-run"] && await hasChanges(worktree.worktreePath)) {
           console.log(`\n📤 Committing & pushing branch ${worktree.branchName}...`);
           await commitWorktreeChanges(worktree.worktreePath, `Fix #${taskId}: ${prompt}`);
@@ -190,7 +190,7 @@ export async function main(args: string[] = Deno.args) {
                   owner: ghContext.repoOwner,
                   repo: ghContext.repoName,
                   issueNumber: ghContext.issueNumber,
-                  body: `🤖 **GravityWorker** has completed this task!\n\n**Pull Request:** ${prUrl}\n\n${walkthroughContent}`,
+                  body: `Sain tehtävän valmiiksi! 🎉\n\n**Pull Request:** ${prUrl}\n\n${walkthroughContent}`,
                   token: githubToken,
                 });
               }
