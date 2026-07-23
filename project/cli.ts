@@ -33,6 +33,7 @@ USAGE:
 
 COMMANDS:
   run          Execute an agent task (default)
+  setup-app    Automated creation of @gravity-worker[bot] GitHub App
   status       Check status of current worker / worktrees
   version      Print version information
   help         Print this help message
@@ -48,14 +49,14 @@ OPTIONS:
   -v, --version          Show version
 
 EXAMPLES:
+  # Automated GitHub App setup
+  gravity-worker setup-app
+
   # Run a prompt locally in an isolated worktree
   gravity-worker run --prompt "Fix bug in auth middleware"
 
   # Process a specific GitHub issue with custom agent
   gravity-worker run --issue 42 --agent agy
-
-  # Show version
-  gravity-worker --version
 `);
 }
 
@@ -89,6 +90,13 @@ export async function main(args: string[] = Deno.args) {
   }
 
   switch (command) {
+    case "setup-app": {
+      const { SetupAppCommand } = await import("@gravity-worker/commands/setup_app.ts");
+      const cmd = new SetupAppCommand();
+      const res = await cmd.handle();
+      Deno.exit(res.exitCode);
+      break;
+    }
     case "run": {
       const taskId = flags.issue ? `issue-${flags.issue}` : `task-${Date.now()}`;
       const prompt = flags.prompt ?? (flags.issue ? `Fix GitHub issue #${flags.issue}` : "Default task");

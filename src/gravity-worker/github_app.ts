@@ -1,0 +1,141 @@
+/**
+ * GravityWorker - GitHub App Manifest Flow & JWT Auth Module
+ *
+ * Automated GitHub App registration and JWT token exchange for @gravity-worker[bot] identity.
+ *
+ * @module gravity-worker/github_app
+ */
+
+export interface GitHubAppCredentials {
+  appId: string;
+  privateKey: string;
+  slug: string;
+  htmlUrl: string;
+}
+
+export interface ManifestOptions {
+  appName?: string;
+  redirectUrl?: string;
+}
+
+/**
+ * Builds the GitHub App Manifest JSON object.
+ */
+export function buildAppManifest(options: ManifestOptions = {}): Record<string, unknown> {
+  const { appName = "gravity-worker", redirectUrl = "http://localhost:3000/callback" } = options;
+
+  return {
+    name: appName,
+    url: "https://github.com/atzufuki/gravity-worker",
+    redirect_url: redirectUrl,
+    public: false,
+    default_permissions: {
+      issues: "write",
+      pull_requests: "write",
+      contents: "write",
+      metadata: "read",
+    },
+    default_events: [
+      "issues",
+      "issue_comment",
+      "pull_request",
+    ],
+  };
+}
+
+/**
+ * Creates the GitHub App Manifest creation URL for browser opening.
+ */
+export function getManifestUrl(options: ManifestOptions = {}): string {
+  const manifest = buildAppManifest(options);
+  const jsonStr = JSON.stringify(manifest);
+  return `https://github.com/settings/apps/new?manifest=${encodeURIComponent(jsonStr)}`;
+}
+
+/**
+ * Exchanges the code from the manifest callback URL for App ID and Private Key.
+ */
+export async function exchangeManifestCode(code: string): Promise<GitHubAppCredentials> {
+  const response = await fetch(`https://api.github.com/app-manifests/${code}/conversions`, {
+    method: "POST",
+    headers: {
+      "Accept": "application/vnd.github.v3+json",
+      "User-Agent": "GravityWorker",
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to exchange GitHub App code: HTTP ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  return {
+    appId: String(data.id),
+    privateKey: data.pem,
+    slug: data.slug,
+    htmlUrl: data.html_url,
+  };
+}
+
+/**
+ * Starts a temporary local HTTP server to receive the GitHub App manifest callback.
+ */
+export async function listenForManifestCallback(port = 3000, timeoutMs = 120000): Promise<GitHubAppCredentials> {
+  const controller = new AbortController();
+  const { signal } = controller;
+
+  let credentialsResolver: (value: GitHubAppCredentials) => void;
+  let credentialsRejecter: (reason: Error) => void;
+
+  const promise = new Promise<GitHubAppCredentials>((resolve, reject) => {
+    credentialsResolver = resolve;
+    credentialsRejecter = reject;
+  });
+
+  const server = Deno.serve(
+    { port, signal, onListen: () => {} },
+    async (req: Request) => {
+      const url = new URL(req.url);
+      const code = url.searchParams.get("code");
+
+      if (code) {
+        try {
+          const credentials = await exchangeManifestCode(code);
+          credentialsResolver(credentials);
+          setTimeout(() => controller.abort(), 500);
+
+          return new Response(
+            `<html><body style="font-family:sans-serif;text-align:center;padding:50px;">
+              <h2>🎉 GitHub App Created Successfully!</h2>
+              <p>You can close this tab and return to your terminal.</p>
+            </body></html>`,
+            { headers: { "content-type": "text/html; charset=utf-8" } },
+          );
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          credentialsRejecter(new Error(errorMsg));
+          setTimeout(() => controller.abort(), 500);
+          return new Response(`Error: ${errorMsg}`, { status: 500 });
+        }
+      }
+
+      return new Response("Waiting for GitHub callback...", { status: 400 });
+    },
+  );
+
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+    credentialsRejecter(new Error("Timeout waiting for GitHub App callback"));
+  }, timeoutMs);
+
+  try {
+    const creds = await promise;
+    clearTimeout(timeoutId);
+    return creds;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    await server.finished.catch(() => {});
+    throw err;
+  }
+}
