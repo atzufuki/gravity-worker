@@ -145,12 +145,17 @@ export async function commitWorktreeChanges(
 }
 
 /**
- * Pushes worktree branch to remote repository.
+ * Pushes worktree branch to remote repository using --force-with-lease to safely update existing PR branches.
  */
 export async function pushWorktreeBranch(
   worktreePath: string,
   branchName: string,
   remote = "origin",
+  force = true,
 ): Promise<void> {
-  await runGit(["push", "-u", remote, branchName], worktreePath);
+  const args = ["push", "-u", remote, branchName];
+  if (force) {
+    args.push("--force-with-lease");
+  }
+  await runGit(args, worktreePath);
 }

@@ -1,8 +1,8 @@
 /**
- * GravityWorker - GitHub App Manifest Flow & Automated Repository Setup Module
+ * GravityWorker - GitHub App Manifest Flow & JWT Auth
  *
- * Automated GitHub App registration via POST form auto-submission, workflow permissions configuration,
- * secret management, and workflow file generation for 100% zero-config deployment.
+ * Provides single-click GitHub App creation via POST form manifest submission,
+ * RSA PKCS1/PKCS8 private key parsing, RS256 JWT generation, and installation token exchange.
  *
  * @module gravity-worker/github_app
  */
@@ -16,40 +16,46 @@ export interface GitHubAppCredentials {
 
 export interface ManifestOptions {
   appName?: string;
-  redirectUrl?: string;
+  appUrl?: string;
+  callbackUrl?: string;
+  setupUrl?: string;
 }
 
 /**
- * Builds the GitHub App Manifest JSON object.
+ * Builds the official GitHub App Manifest specification.
  */
 export function buildAppManifest(options: ManifestOptions = {}): Record<string, unknown> {
-  const { appName = "gravity-worker", redirectUrl = "http://localhost:3000/callback" } = options;
+  const {
+    appName = "gravity-worker",
+    appUrl = "https://github.com/atzufuki/gravity-worker",
+    callbackUrl = "http://localhost:3000",
+  } = options;
 
   return {
     name: appName,
-    url: "https://github.com/atzufuki/gravity-worker",
-    redirect_url: redirectUrl,
+    url: appUrl,
     hook_attributes: {
       url: "https://example.com/webhook",
       active: false,
     },
-    public: false,
+    redirect_url: callbackUrl,
+    public: true,
     default_permissions: {
+      contents: "write",
       issues: "write",
       pull_requests: "write",
-      contents: "write",
-      metadata: "read",
+      actions: "read",
     },
     default_events: [
       "issues",
       "issue_comment",
-      "pull_request",
+      "label",
     ],
   };
 }
 
 /**
- * Exchanges the code from the manifest callback URL for App ID and Private Key.
+ * Converts a raw code from GitHub Manifest creation redirect into GitHub App Credentials.
  */
 export async function exchangeManifestCode(code: string): Promise<GitHubAppCredentials> {
   const response = await fetch(`https://api.github.com/app-manifests/${code}/conversions`, {
@@ -61,8 +67,8 @@ export async function exchangeManifestCode(code: string): Promise<GitHubAppCrede
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to exchange GitHub App code: HTTP ${response.status} - ${errorText}`);
+    const errText = await response.text();
+    throw new Error(`Failed to exchange GitHub App manifest code (${response.status}): ${errText}`);
   }
 
   const data = await response.json();
@@ -75,7 +81,62 @@ export async function exchangeManifestCode(code: string): Promise<GitHubAppCrede
 }
 
 /**
+ * Wraps PKCS#1 RSA private key DER bytes into PKCS#8 PrivateKeyInfo structure
+ * to enable native Deno / Web Crypto importKey("pkcs8", ...).
+ */
+function convertPkcs1ToPkcs8(pkcs1Der: Uint8Array): Uint8Array {
+  // Check if it's already PKCS#8 (contains rsaEncryption OID: 1.2.840.113549.1.1.1)
+  const rsaOid = new Uint8Array([0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01]);
+  for (let i = 0; i < Math.min(pkcs1Der.length - 9, 30); i++) {
+    if (pkcs1Der.subarray(i, i + 9).every((b, idx) => b === rsaOid[idx])) {
+      return pkcs1Der;
+    }
+  }
+
+  const encodeLength = (len: number): Uint8Array => {
+    if (len < 128) return new Uint8Array([len]);
+    if (len < 256) return new Uint8Array([0x81, len]);
+    if (len < 65536) return new Uint8Array([0x82, (len >> 8) & 0xff, len & 0xff]);
+    return new Uint8Array([0x83, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff]);
+  };
+
+  // AlgorithmIdentifier: rsaEncryption OID + NULL
+  const algId = new Uint8Array([
+    0x30, 0x0d,
+    0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01,
+    0x05, 0x00,
+  ]);
+
+  // Version INTEGER 0
+  const version = new Uint8Array([0x02, 0x01, 0x00]);
+
+  // OCTET STRING wrapping pkcs1Der
+  const octetLen = encodeLength(pkcs1Der.length);
+  const octetString = new Uint8Array(1 + octetLen.length + pkcs1Der.length);
+  octetString[0] = 0x04;
+  octetString.set(octetLen, 1);
+  octetString.set(pkcs1Der, 1 + octetLen.length);
+
+  // Outer SEQUENCE wrapping (version + algId + octetString)
+  const innerLen = version.length + algId.length + octetString.length;
+  const seqLen = encodeLength(innerLen);
+  const pkcs8 = new Uint8Array(1 + seqLen.length + innerLen);
+  pkcs8[0] = 0x30;
+  pkcs8.set(seqLen, 1);
+
+  let offset = 1 + seqLen.length;
+  pkcs8.set(version, offset);
+  offset += version.length;
+  pkcs8.set(algId, offset);
+  offset += algId.length;
+  pkcs8.set(octetString, offset);
+
+  return pkcs8;
+}
+
+/**
  * Converts a PEM RSA private key string into a CryptoKey for signing RS256 JWTs.
+ * Supports both PKCS#1 (-----BEGIN RSA PRIVATE KEY-----) and PKCS#8 (-----BEGIN PRIVATE KEY-----).
  */
 async function importRsaPrivateKey(pemKey: string): Promise<CryptoKey> {
   const pemContents = pemKey
@@ -86,9 +147,11 @@ async function importRsaPrivateKey(pemKey: string): Promise<CryptoKey> {
     .replace(/\s+/g, "");
 
   const binaryDer = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
+  const pkcs8Der = convertPkcs1ToPkcs8(binaryDer);
+
   return await crypto.subtle.importKey(
     "pkcs8",
-    binaryDer.buffer,
+    pkcs8Der.buffer as unknown as ArrayBuffer,
     {
       name: "RSASSA-PKCS1-v1_5",
       hash: "SHA-256",
