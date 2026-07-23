@@ -19,7 +19,7 @@ inputs:
     description: 'GitHub Token for posting comments and PRs'
     required: false
   gemini-api-key:
-    description: 'API key for Antigravity engine'
+    description: 'API key for Antigravity engine / Gemini API'
     required: false
   app-id:
     description: 'GitHub App ID for dedicated gravity-worker[bot] identity'
@@ -41,6 +41,19 @@ runs:
       uses: denoland/setup-deno@v2
       with:
         deno-version: v2.x
+
+    - name: Setup Antigravity CLI (agy)
+      shell: bash
+      run: |
+        if ! command -v agy &> /dev/null; then
+          echo "Attempting Antigravity CLI (agy) installation..."
+          curl -fsSL https://antigravity.google/install.sh | sh -s -- --yes || true
+          if [ -d "$HOME/.antigravity/bin" ]; then
+            echo "$HOME/.antigravity/bin" >> $GITHUB_PATH
+          elif [ -d "$HOME/.local/bin" ]; then
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
+          fi
+        fi
 
     - name: Run GravityWorker CLI
       shell: bash
