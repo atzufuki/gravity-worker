@@ -11,7 +11,7 @@
 - **🚀 Universal & Agnostic:** Works with any AI engine (`agy` / Antigravity, Gemini API, Claude Code, Aider, custom LLMs) and any Git host (GitHub, GitLab, Forgejo).
 - **🌿 Git Worktree Isolation:** Runs every agent task in an isolated Git worktree so your primary working tree stays clean.
 - **⚡ Zero-Delay CI & Single Binary:** Compiles into a standalone single binary via `deno task compile` for fast startup without `node_modules` overhead.
-- **🤖 GitHub App Manifest Flow (`setup-app`):** Automated creation of `@gravity-worker[bot]` identity with custom avatar and permissions.
+- **🤖 GitHub App Manifest Flow (`install`):** Automated creation of `@gravity-worker[bot]` identity with custom avatar and permissions.
 - **🛠️ Built on Alexi:** Powered by Deno's Django-inspired framework for modular configuration and management commands.
 - **🔌 Native MCP & Agent Integration:** Includes `.agents/` configuration for Model Context Protocol (MCP) servers and agent skills.
 
@@ -19,10 +19,10 @@
 
 ## Quick Start
 
-### 1. Automated GitHub App Setup
+### 1. Automated GitHub App Installation
 ```bash
 # Register automated @gravity-worker[bot] GitHub App
-deno task start setup-app
+deno task start install --repo owner/repo
 ```
 
 ### 2. Run Tasks via Deno
@@ -69,7 +69,7 @@ gravity-worker/
 │   ├── cli.ts            # CLI application entry point (@std/cli)
 │   ├── settings.ts       # Alexi project settings
 │   └── production.ts     # Production settings (DenoKV remote)
-├── manage.ts             # Alexi management CLI (worktrees, setup_app)
+├── manage.ts             # Alexi management CLI (worktrees, install, uninstall)
 ├── deno.jsonc            # Deno workspace configuration & tasks
 ├── src/
 │   └── gravity-worker/   # Core GravityWorker app
@@ -79,7 +79,7 @@ gravity-worker/
 │       ├── artifacts.ts  # Antigravity markdown artifact generator
 │       ├── github.ts     # GitHub API & webhook payload handler
 │       ├── github_app.ts # GitHub App Manifest Flow & JWT Auth
-│       ├── commands/     # Alexi management commands (worktrees, setup_app)
+│       ├── commands/     # Alexi management commands (worktrees, install, uninstall)
 │       ├── views.ts      # Health & status endpoints
 │       └── urls.ts       # URL routing
 ├── .agents/              # MCP servers & agent skills
