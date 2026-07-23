@@ -1,6 +1,6 @@
-# Built binaries
-gravity-worker
-gravity-worker-*
+# Built binaries (anchored to root)
+/gravity-worker
+/gravity-worker-*
 bin/
 dist/
 

@@ -127,6 +127,11 @@ export async function createPullRequest(
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[GitHub API] Failed to create PR: HTTP ${response.status} - ${errorText}`);
+      if (response.status === 403) {
+        console.error(
+          `💡 Tip: Ensure 'Allow GitHub Actions to create and approve pull requests' is enabled in Repository Settings -> Actions -> General -> Workflow permissions.`,
+        );
+      }
       return null;
     }
 
