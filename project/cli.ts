@@ -45,6 +45,7 @@ OPTIONS:
   -a, --agent <name>     AI agent engine to use (default: "antigravity")
   -i, --issue <number>   GitHub / Git issue ID to process
   -r, --repo <spec/dir>  Target GitHub repository (owner/repo or local directory)
+  -k, --key <api_key>    GEMINI_API_KEY to inject into GitHub secrets
   -w, --worktree [name]  Run in an isolated Git worktree (default: true)
       --keep-worktree    Keep worktree directory after execution
       --dry-run          Simulate execution without making changes
@@ -55,8 +56,8 @@ EXAMPLES:
   # Automated 100% Zero-Touch Installation for current repository
   gravity-worker install
 
-  # Automated Installation for specific repository or local path
-  gravity-worker install --repo atzufuki/siht.io
+  # Automated Installation with custom GEMINI_API_KEY
+  gravity-worker install --repo atzufuki/siht.io --key YOUR_GEMINI_API_KEY
 
   # Uninstall GravityWorker from target repository
   gravity-worker uninstall --repo /var/home/atzufuki/Code/siht.io
@@ -79,9 +80,10 @@ export async function main(args: string[] = Deno.args) {
       i: "issue",
       w: "worktree",
       r: "repo",
+      k: "key",
     },
     boolean: ["help", "version", "dry-run", "keep-worktree"],
-    string: ["prompt", "agent", "issue", "worktree", "repo"],
+    string: ["prompt", "agent", "issue", "worktree", "repo", "key"],
     default: {
       agent: "antigravity",
     },
@@ -103,14 +105,14 @@ export async function main(args: string[] = Deno.args) {
     case "install": {
       const { InstallCommand } = await import("@gravity-worker/commands/install.ts");
       const cmd = new InstallCommand();
-      const res = await cmd.handle(flags.repo);
+      const res = await cmd.handle(flags);
       Deno.exit(res.exitCode);
       break;
     }
     case "uninstall": {
       const { UninstallCommand } = await import("@gravity-worker/commands/uninstall.ts");
       const cmd = new UninstallCommand();
-      const res = await cmd.handle(flags.repo);
+      const res = await cmd.handle(flags);
       Deno.exit(res.exitCode);
       break;
     }

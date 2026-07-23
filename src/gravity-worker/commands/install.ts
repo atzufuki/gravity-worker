@@ -31,6 +31,33 @@ function openBrowser(url: string) {
   }
 }
 
+async function resolveGeminiApiKey(options?: any, targetDir = "."): Promise<string | undefined> {
+  if (typeof options === "object" && (options?.geminiApiKey || options?.key)) {
+    return options.geminiApiKey ?? options.key;
+  }
+
+  let key = Deno.env.get("GEMINI_API_KEY");
+  if (key) return key;
+
+  try {
+    const text = await Deno.readTextFile(`${targetDir}/.env`);
+    const match = text.match(/GEMINI_API_KEY=["']?([^"'\r\n]+)["']?/);
+    if (match?.[1]) return match[1];
+  } catch {
+    // Ignore
+  }
+
+  try {
+    const text = await Deno.readTextFile(".env");
+    const match = text.match(/GEMINI_API_KEY=["']?([^"'\r\n]+)["']?/);
+    if (match?.[1]) return match[1];
+  } catch {
+    // Ignore
+  }
+
+  return undefined;
+}
+
 export class InstallCommand extends BaseCommand {
   override name = "install";
   override help = "100% Zero-Touch Automated Setup & Installation of GravityWorker for GitHub";
@@ -146,10 +173,13 @@ export class InstallCommand extends BaseCommand {
       const appSaved = await setRepoSecretWithGh("GRAVITY_WORKER_APP_ID", creds.appId, repoSpec);
       const keySaved = await setRepoSecretWithGh("GRAVITY_WORKER_PRIVATE_KEY", creds.privateKey, repoSpec);
 
-      const geminiEnvKey = Deno.env.get("GEMINI_API_KEY");
-      if (geminiEnvKey) {
-        await setRepoSecretWithGh("GEMINI_API_KEY", geminiEnvKey, repoSpec);
-        console.log("✓ Injected GEMINI_API_KEY from local environment.");
+      const geminiApiKey = await resolveGeminiApiKey(options, targetDir);
+      if (geminiApiKey) {
+        await setRepoSecretWithGh("GEMINI_API_KEY", geminiApiKey, repoSpec);
+        console.log("✓ Injected GEMINI_API_KEY to repository secrets.");
+      } else {
+        console.log("\n⚠️ Note: GEMINI_API_KEY environment variable was not found in shell or .env file.");
+        console.log(`   To inject it on GitHub, run: gh secret set GEMINI_API_KEY -b <YOUR_KEY> --repo ${repoSpec ?? "owner/repo"}`);
       }
 
       if (appSaved && keySaved) {
