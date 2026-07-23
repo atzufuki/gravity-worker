@@ -88,6 +88,63 @@ ANTHROPIC_API_KEY=your_anthropic_api_key_here
   return false;
 }
 
+export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
+
+/**
+ * Calls Gemini API using Interactions API (/v1beta/interactions) with fallback to generateContent.
+ */
+async function callGeminiApi(
+  apiKey: string,
+  promptText: string,
+  model: string = DEFAULT_GEMINI_MODEL,
+): Promise<{ ok: boolean; status: number; text: string; rawError?: string }> {
+  // 1. Try modern Gemini Interactions API (/v1beta/interactions)
+  try {
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        input: promptText,
+      }),
+    });
+
+    if (resp.ok) {
+      const data = await resp.json();
+      const extractedText = data.output?.[0]?.text ?? data.output?.[0]?.content?.[0]?.text ?? data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      if (extractedText) return { ok: true, status: resp.status, text: extractedText.trim() };
+    }
+  } catch {
+    // Fall back to generateContent
+  }
+
+  // 2. Fallback to generateContent endpoint
+  try {
+    const fallbackResp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptText }] }],
+        }),
+      },
+    );
+
+    if (fallbackResp.ok) {
+      const data = await fallbackResp.json();
+      const extractedText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? data.output?.[0]?.text ?? "";
+      return { ok: true, status: fallbackResp.status, text: extractedText.trim() };
+    }
+
+    const errText = await fallbackResp.text();
+    return { ok: false, status: fallbackResp.status, text: "", rawError: errText };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, status: 500, text: "", rawError: msg };
+  }
+}
+
 /**
  * Uses Gemini API to dynamically generate natural, polite status comments in the exact language of the user's prompt.
  */
@@ -116,21 +173,9 @@ Include relevant emojis (e.g. 🎉).
 CRITICAL: Respond ONLY in the EXACT SAME LANGUAGE as the user's prompt. Do NOT add extra explanations or quotes.`;
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemInstruction}\n\nUser Issue/Prompt: "${prompt}"` }] }],
-        }),
-      },
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (text) return text;
+    const res = await callGeminiApi(apiKey, `${systemInstruction}\n\nUser Issue/Prompt: "${prompt}"`);
+    if (res.ok && res.text) {
+      return res.text;
     }
   } catch {
     // Ignore network error and use fallback
@@ -193,29 +238,18 @@ If you need to create or update files, include a JSON block in your response for
 \`\`\`
 Summarize what you accomplished concisely.`;
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `${systemInstruction}\n\nTask: ${prompt}` }] }],
-          }),
-        },
-      );
+      const res = await callGeminiApi(apiKey, `${systemInstruction}\n\nTask: ${prompt}`);
 
-      if (!response.ok) {
-        const errorText = await response.text();
+      if (!res.ok) {
         return {
           success: false,
           output: "",
-          error: `Gemini API HTTP ${response.status}: ${errorText}`,
+          error: `Gemini API HTTP ${res.status}: ${res.rawError || "Unknown error"}`,
           durationMs: Date.now() - startTime,
         };
       }
 
-      const data = await response.json();
-      const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      const textOutput = res.text;
 
       // Parse and apply file writes if present
       const jsonMatch = textOutput.match(/```json\s*(\[\s*\{[\s\S]*\}\s*\])\s*```/) || textOutput.match(/(\[\s*\{[\s\S]*\}\s*\])/);

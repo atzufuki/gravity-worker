@@ -2,7 +2,7 @@
   "appId": "4375516",
   "appSlug": "herkules-bot",
   "relayUrl": "https://herkules.atzufuki.deno.net",
-  "targetRepo": "atzufuki/siht.io",
+  "targetRepo": "atzufuki/herkules",
   "targetDir": ".",
-  "updatedAt": "2026-07-23T18:27:11.921Z"
+  "updatedAt": "2026-07-23T20:06:59.879Z"
 }
