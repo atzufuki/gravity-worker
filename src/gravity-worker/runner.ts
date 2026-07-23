@@ -1,7 +1,7 @@
 /**
- * GravityWorker - Agent Runner Interface & Implementations
+ * GravityWorker - Agent Runner Engine Subsystem
  *
- * Agnostic agent runner framework for Antigravity (agy), Gemini API, Claude, and custom LLM engines.
+ * Provides execution runners for Antigravity (agy), Gemini API, and custom LLM CLI engines.
  *
  * @module gravity-worker/runner
  */
@@ -9,7 +9,6 @@
 export interface RunOptions {
   prompt: string;
   worktreePath: string;
-  agentName?: string;
   dryRun?: boolean;
   env?: Record<string, string>;
 }
@@ -209,7 +208,7 @@ export class AntigravityRunner implements AgentRunner {
 
     try {
       const command = new Deno.Command("agy", {
-        args: ["--headless", prompt],
+        args: ["--print", prompt, "--dangerously-skip-permissions"],
         cwd: worktreePath,
         env: { ...Deno.env.toObject(), ...env },
         stdout: "piped",
@@ -219,6 +218,16 @@ export class AntigravityRunner implements AgentRunner {
       const output = await command.output();
       const stdout = new TextDecoder().decode(output.stdout);
       const stderr = new TextDecoder().decode(output.stderr);
+
+      if (!output.success) {
+        // Fallback to Gemini API runner if agy CLI fails in CI execution
+        const hasApiKey = (env?.GEMINI_API_KEY ?? Deno.env.get("GEMINI_API_KEY")) !== undefined;
+        if (hasApiKey) {
+          console.log(`[AntigravityRunner] 'agy' CLI error (${stderr.trim()}). Falling back to Gemini API Runner...`);
+          const geminiRunner = new GeminiRunner();
+          return await geminiRunner.run(options);
+        }
+      }
 
       return {
         success: output.success,
