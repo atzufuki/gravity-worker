@@ -1,7 +1,8 @@
 /**
- * GravityWorker - GitHub App Manifest Flow & JWT Auth Module
+ * GravityWorker - GitHub App Manifest Flow & Automated Repository Setup Module
  *
- * Automated GitHub App registration and JWT token exchange for @gravity-worker[bot] identity.
+ * Automated GitHub App registration, workflow permissions configuration, secret management,
+ * and workflow file generation for 100% zero-config deployment.
  *
  * @module gravity-worker/github_app
  */
@@ -108,7 +109,7 @@ export async function listenForManifestCallback(port = 3000, timeoutMs = 120000)
           return new Response(
             `<html><body style="font-family:sans-serif;text-align:center;padding:50px;">
               <h2>🎉 GitHub App Created Successfully!</h2>
-              <p>You can close this tab and return to your terminal.</p>
+              <p>GravityWorker is setting up your repository...</p>
             </body></html>`,
             { headers: { "content-type": "text/html; charset=utf-8" } },
           );
@@ -138,4 +139,116 @@ export async function listenForManifestCallback(port = 3000, timeoutMs = 120000)
     await server.finished.catch(() => {});
     throw err;
   }
+}
+
+/**
+ * Enables PR creation and write permissions on a GitHub repository via API.
+ */
+export async function enableRepoWorkflowPermissions(
+  owner: string,
+  repo: string,
+  token: string,
+): Promise<boolean> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/actions/permissions/workflow`;
+  try {
+    const response = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Accept": "application/vnd.github.v3+json",
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "User-Agent": "GravityWorker",
+      },
+      body: JSON.stringify({
+        default_workflow_permissions: "write",
+        can_approve_pull_request_reviews: true,
+      }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Automatically sets a repository secret using GitHub CLI (gh secret set).
+ */
+export async function setRepoSecretWithGh(
+  secretName: string,
+  secretValue: string,
+  repoSpec?: string,
+): Promise<boolean> {
+  try {
+    const args = ["secret", "set", secretName, "-b", secretValue];
+    if (repoSpec) {
+      args.push("--repo", repoSpec);
+    }
+    const command = new Deno.Command("gh", {
+      args,
+      stdout: "piped",
+      stderr: "piped",
+    });
+    const output = await command.output();
+    return output.success;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Creates or updates the GravityWorker workflow file in a repository directory.
+ */
+export async function createWorkflowFile(repoDir = "."): Promise<string> {
+  const workflowDir = `${repoDir}/.github/workflows`;
+  await Deno.mkdir(workflowDir, { recursive: true });
+  const workflowPath = `${workflowDir}/gravity-worker.yml`;
+
+  const content = `name: GravityWorker Agent Automation
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Task instructions for GravityWorker'
+        required: true
+      agent:
+        description: 'Agent engine (default: antigravity)'
+        required: false
+        default: 'antigravity'
+
+jobs:
+  gravity-worker:
+    if: >-
+      (github.event_name == 'issues' && github.event.label.name == 'gravity-fix') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@gravity-worker')) ||
+      (github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run GravityWorker Agent
+        uses: atzufuki/gravity-worker@main
+        with:
+          prompt: \${{ github.event.inputs.prompt || github.event.issue.title || github.event.comment.body }}
+          agent: \${{ github.event.inputs.agent || 'antigravity' }}
+          issue-id: \${{ github.event.issue.number }}
+          github-token: \${{ secrets.GITHUB_TOKEN }}
+          gemini-api-key: \${{ secrets.GEMINI_API_KEY }}
+`;
+
+  await Deno.writeTextFile(workflowPath, content);
+  return workflowPath;
 }

@@ -1,12 +1,12 @@
 # GitHub Integration & Setup Guide
 
-This guide walks you through setting up **GravityWorker** in any GitHub repository using GitHub Actions.
+This guide walks you through setting up **GravityWorker** in any GitHub repository.
 
 ---
 
-## 1. Automated GitHub App Setup (`setup-app`)
+## ⚡ 100% Zero-Touch Automated Setup (`setup-app`)
 
-To run GravityWorker with a dedicated `@gravity-worker[bot]` identity (with custom avatar and bot badge), run the automated Manifest setup command:
+GravityWorker provides a **single automated command** that performs all setup steps without manual configuration in GitHub UI:
 
 ```bash
 deno task start setup-app
@@ -14,44 +14,32 @@ deno task start setup-app
 ./gravity-worker setup-app
 ```
 
-This will:
-1. Open your browser with a pre-configured GitHub App creation form.
-2. Complete single-click authorization.
-3. Automatically retrieve your `APP_ID` and `PRIVATE_KEY` and output them for your GitHub Repository Secrets (`GRAVITY_WORKER_APP_ID` & `GRAVITY_WORKER_PRIVATE_KEY`).
+### What `setup-app` Automates:
+
+1. **GitHub App Creation:** Opens your browser for a 1-click authorization that registers the official `@gravity-worker[bot]` identity.
+2. **Workflow File Generation:** Generates `.github/workflows/gravity-worker.yml` directly in your repository.
+3. **Secret Injection:** Automatically sets `GRAVITY_WORKER_APP_ID`, `GRAVITY_WORKER_PRIVATE_KEY`, and `GEMINI_API_KEY` into your repository via `gh CLI`.
+4. **Workflow Permissions:** Programmatically enables Read & Write permissions and PR creation rights on your repository via GitHub REST API.
 
 ---
 
-## 2. Configure Repository Workflow Permissions
+## 🛠️ Manual Alternative Setup (Optional)
 
-When using standard `GITHUB_TOKEN`, GitHub restricts PR creation by default. Enable PR creation permissions:
+If you prefer to configure steps manually without using `setup-app`:
 
-1. Open your repository on GitHub.
-2. Go to **Settings** → **Actions** → **General** (under *Code and automation*).
-3. Scroll down to **Workflow permissions**:
+### Step 1: Configure Repository Workflow Permissions
+1. Open your repository on GitHub → **Settings** → **Actions** → **General**.
+2. Under **Workflow permissions**:
    - Select **Read and write permissions**.
    - Check **Allow GitHub Actions to create and approve pull requests** ☑️.
-4. Click **Save**.
+3. Click **Save**.
 
-> [!IMPORTANT]
-> Without this setting, GITHUB_TOKEN calls will fail with `HTTP 403: GitHub Actions is not permitted to create or approve pull requests.`
-
----
-
-## 3. Add Required Secrets (`GEMINI_API_KEY`)
-
-GravityWorker requires an API key for the LLM runner when running in GitHub Actions.
-
+### Step 2: Add Required Secret (`GEMINI_API_KEY`)
 1. Go to **Settings** → **Secrets and variables** → **Actions**.
-2. Click **New repository secret**.
-3. Set **Name:** `GEMINI_API_KEY`
-4. Set **Value:** *Your Gemini API Key*
-5. Click **Add secret**.
+2. Add a new repository secret named `GEMINI_API_KEY` with your API key.
 
----
-
-## 4. Add Workflow File to Your Repository
-
-Create `.github/workflows/gravity-worker.yml` in your target repository:
+### Step 3: Add Workflow File
+Create `.github/workflows/gravity-worker.yml`:
 
 ```yaml
 name: GravityWorker Agent Automation
@@ -102,7 +90,7 @@ jobs:
 
 ---
 
-## 5. How GravityWorker Interacts with Issues & PRs
+## 🤖 How GravityWorker Interacts with Issues & PRs
 
 - **Human-Friendly Comments:** Posts first-person status updates when starting work and when completing tasks.
 - **Automated Pull Requests:** Opens a PR against `main` containing code changes and links the PR to automatically close the issue using `Closes #<issue>`.
