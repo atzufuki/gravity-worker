@@ -3,7 +3,7 @@
  *
  * Automated 100% Zero-Touch GitHub Setup for GravityWorker.
  * Creates GitHub App via auto-submitted manifest POST form, configures workflow permissions,
- * injects secrets, and generates workflow file.
+ * injects secrets, commits workflow file, and launches App Installation in browser.
  *
  * @module gravity-worker/commands/setup_app
  */
@@ -16,6 +16,20 @@ import {
   setRepoSecretWithGh,
 } from "@gravity-worker/github_app.ts";
 import { getGitHubContext, getRepoFromGitRemote } from "@gravity-worker/github.ts";
+
+function openBrowser(url: string) {
+  try {
+    if (Deno.build.os === "linux") {
+      new Deno.Command("xdg-open", { args: [url] }).spawn();
+    } else if (Deno.build.os === "darwin") {
+      new Deno.Command("open", { args: [url] }).spawn();
+    } else if (Deno.build.os === "windows") {
+      new Deno.Command("cmd", { args: ["/c", "start", url] }).spawn();
+    }
+  } catch {
+    // Ignore browser open errors
+  }
+}
 
 export class SetupAppCommand extends BaseCommand {
   override name = "setup_app";
@@ -72,19 +86,7 @@ export class SetupAppCommand extends BaseCommand {
     const callbackPromise = listenForManifestCallback({ appName: manifestAppName });
 
     // Open browser to local server
-    try {
-      setTimeout(() => {
-        if (Deno.build.os === "linux") {
-          new Deno.Command("xdg-open", { args: [localUrl] }).spawn();
-        } else if (Deno.build.os === "darwin") {
-          new Deno.Command("open", { args: [localUrl] }).spawn();
-        } else if (Deno.build.os === "windows") {
-          new Deno.Command("cmd", { args: ["/c", "start", localUrl] }).spawn();
-        }
-      }, 300);
-    } catch {
-      // Ignore if browser launch fails
-    }
+    setTimeout(() => openBrowser(localUrl), 300);
 
     console.log("2️⃣ Waiting for single-click GitHub App creation...");
 
@@ -94,10 +96,46 @@ export class SetupAppCommand extends BaseCommand {
       console.log(`- App Name: ${creds.slug}`);
       console.log(`- App ID:   ${creds.appId}`);
 
-      // 2. Automate .github/workflows/gravity-worker.yml file generation
+      // Open installation URL so user can install the App on the repo
+      const installUrl = `https://github.com/apps/${creds.slug}/installations/new`;
+      console.log(`\n🔗 Opening App installation page: ${installUrl}`);
+      openBrowser(installUrl);
+
+      // 2. Automate .github/workflows/gravity-worker.yml file generation and git push
       console.log(`\n3️⃣ Generating .github/workflows/gravity-worker.yml in ${targetDir}...`);
       const workflowPath = await createWorkflowFile(targetDir);
       console.log(`✓ Workflow file generated at: ${workflowPath}`);
+
+      try {
+        const gitAddCmd = new Deno.Command("git", {
+          args: ["add", ".github/workflows/gravity-worker.yml"],
+          cwd: targetDir,
+          stdout: "piped",
+          stderr: "piped",
+        });
+        await gitAddCmd.output();
+
+        const gitCommitCmd = new Deno.Command("git", {
+          args: ["commit", "-m", "Add GravityWorker GitHub Actions automation workflow"],
+          cwd: targetDir,
+          stdout: "piped",
+          stderr: "piped",
+        });
+        await gitCommitCmd.output();
+
+        const gitPushCmd = new Deno.Command("git", {
+          args: ["push", "origin", "HEAD"],
+          cwd: targetDir,
+          stdout: "piped",
+          stderr: "piped",
+        });
+        const pushRes = await gitPushCmd.output();
+        if (pushRes.success) {
+          console.log(`✓ Committed & pushed workflow file to remote GitHub repository!`);
+        }
+      } catch (e) {
+        console.warn("⚠️ Warning: Could not push workflow file via Git:", e);
+      }
 
       // 3. Automate Secret Injection via gh CLI
       console.log(`\n4️⃣ Injecting repository secrets to ${repoSpec ?? "current repository"}...`);
@@ -135,6 +173,7 @@ export class SetupAppCommand extends BaseCommand {
       console.log("✨ 100% ZERO-TOUCH SETUP COMPLETE!");
       console.log("=======================================================");
       console.log(`GravityWorker is ready to process issues on ${repoSpec ?? "your repository"}.`);
+      console.log(`Ensure the GitHub App is installed on ${repoSpec ?? "your repository"}.`);
       console.log("Add the 'gravity-fix' label to any issue to begin!\n");
 
       return { exitCode: 0 };
