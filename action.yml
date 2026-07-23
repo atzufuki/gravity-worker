@@ -45,7 +45,7 @@ runs:
       with:
         deno-version: v2.x
 
-    - name: Setup Antigravity CLI (agy)
+    - name: Setup Antigravity CLI (agy) & D-Bus Keyring
       shell: bash
       env:
         AGY_CREDENTIALS: ${{ inputs.agy-credentials }}
@@ -59,6 +59,12 @@ runs:
           if [ -d "$HOME/.antigravity/bin" ]; then
             echo "$HOME/.antigravity/bin" >> $GITHUB_PATH
           fi
+        fi
+
+        # Start headless D-Bus keyring session if dbus-launch is available
+        if command -v dbus-launch &> /dev/null; then
+          eval $(dbus-launch --sh-syntax)
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> $GITHUB_ENV
         fi
 
         if [ -n "$AGY_CREDENTIALS" ]; then
