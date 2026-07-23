@@ -17,7 +17,6 @@ on:
 
 jobs:
   gravity-worker:
-    # Trigger if issue labeled 'gravity-fix' OR comment mentions '@gravity-worker' OR manual dispatch
     if: >-
       (github.event_name == 'issues' && github.event.label.name == 'gravity-fix') ||
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@gravity-worker')) ||
@@ -36,7 +35,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run GravityWorker Agent
-        uses: ./
+        uses: atzufuki/gravity-worker@main
         with:
           prompt: ${{ github.event.inputs.prompt || github.event.issue.title || github.event.comment.body }}
           agent: ${{ github.event.inputs.agent || 'antigravity' }}

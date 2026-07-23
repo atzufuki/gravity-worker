@@ -30,7 +30,7 @@ export function buildAppManifest(options: ManifestOptions = {}): Record<string, 
     url: "https://github.com/atzufuki/gravity-worker",
     redirect_url: redirectUrl,
     hook_attributes: {
-      url: "http://localhost:3000/webhook",
+      url: "https://example.com/webhook",
       active: false,
     },
     public: false,
