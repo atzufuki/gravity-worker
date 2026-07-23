@@ -19,7 +19,8 @@ import {
 } from "@gravity-worker/git.ts";
 import { AgentRunnerFactory } from "@gravity-worker/runner.ts";
 import { generateImplementationPlan, generateWalkthrough, saveArtifact } from "@gravity-worker/artifacts.ts";
-import { createPullRequest, getGitHubContext, postIssueComment } from "@gravity-worker/github.ts";
+import { createPullRequest, getGitHubContext, isFinnishText, postIssueComment } from "@gravity-worker/github.ts";
+import { getAppInstallationToken } from "@gravity-worker/github_app.ts";
 
 const VERSION = "0.1.0";
 
@@ -55,7 +56,6 @@ EXAMPLES:
 
   # Automated GitHub App setup for specific repository or local path
   gravity-worker setup-app --repo atzufuki/siht.io
-  gravity-worker setup-app --repo /var/home/atzufuki/Code/siht.io
 
   # Run a prompt locally in an isolated worktree
   gravity-worker run --prompt "Fix bug in auth middleware"
@@ -117,28 +117,47 @@ export async function main(args: string[] = Deno.args) {
         Deno.exit(1);
       }
 
-      // 2. Post human-friendly start acknowledgement comment to GitHub Issue if running in CI
-      const githubToken = Deno.env.get("GITHUB_TOKEN");
+      // 2. Resolve GitHub token & context (Attempt @gravity-worker[bot] identity if App credentials exist)
+      let githubToken = Deno.env.get("GITHUB_TOKEN");
       const ghContext = await getGitHubContext();
 
+      const appId = Deno.env.get("GRAVITY_WORKER_APP_ID");
+      const privateKey = Deno.env.get("GRAVITY_WORKER_PRIVATE_KEY");
+
+      if (appId && privateKey && ghContext.repoOwner && ghContext.repoName) {
+        const botToken = await getAppInstallationToken(appId, privateKey, ghContext.repoOwner, ghContext.repoName);
+        if (botToken) {
+          githubToken = botToken;
+          console.log("🤖 Authenticated as dedicated @gravity-worker[bot]");
+        }
+      }
+
+      // Detect language from prompt/issue text
+      const isFinnish = isFinnishText(prompt);
+
+      // 3. Post human-friendly start acknowledgement comment in matching language to GitHub Issue
       if (githubToken && ghContext.repoOwner && ghContext.repoName && ghContext.issueNumber) {
         console.log(`💬 Posting start acknowledgement comment to GitHub Issue #${ghContext.issueNumber}...`);
+        const startBody = isFinnish
+          ? `Otan tämän työn alle! 🚀 Työstän ratkaisua taustalla eristetyssä worktreessä (\`gravity-worker/${taskId}\`) ja avaan PR:n heti kun se on valmis.`
+          : `I'm on it! 🚀 Working on this issue in an isolated background worktree (\`gravity-worker/${taskId}\`). I'll open a PR as soon as it's ready.`;
+
         await postIssueComment({
           owner: ghContext.repoOwner,
           repo: ghContext.repoName,
           issueNumber: ghContext.issueNumber,
-          body: `Otan tämän työn alle! 🚀 Työstän ratkaisua taustalla eristetyssä worktreessä (\`gravity-worker/${taskId}\`) ja avaan PR:n heti kun se on valmis.`,
+          body: startBody,
           token: githubToken,
         });
       }
 
-      // 3. Create isolated Worktree
+      // 4. Create isolated Worktree
       console.log(`\n🌿 Creating Git Worktree for branch gravity-worker/${taskId}...`);
       const worktree = await createWorktree({ taskId });
       console.log(`✓ Worktree ready at: ${worktree.worktreePath}`);
 
       try {
-        // 4. Save Implementation Plan Artifact in hidden .gravity-worker/ (isolated from target repo commits)
+        // 5. Save Implementation Plan Artifact in hidden .gravity-worker/ (isolated from target repo commits)
         console.log(`\n📝 Generating implementation_plan.md artifact...`);
         const planContent = generateImplementationPlan({
           taskId,
@@ -147,7 +166,7 @@ export async function main(args: string[] = Deno.args) {
         });
         await saveArtifact(worktree.worktreePath, ".gravity-worker/implementation_plan.md", planContent);
 
-        // 5. Run Agent
+        // 6. Run Agent
         console.log(`\n🤖 Executing agent (${flags.agent})...`);
         const runner = AgentRunnerFactory.getRunner(flags.agent);
         const result = await runner.run({
@@ -156,10 +175,10 @@ export async function main(args: string[] = Deno.args) {
           dryRun: flags["dry-run"],
         });
 
-        // 6. Get Diff before committing
+        // 7. Get Diff before committing
         const diff = await getWorktreeDiff(worktree.worktreePath).catch(() => "");
 
-        // 7. Save Walkthrough Artifact in hidden .gravity-worker/ (isolated from target repo commits)
+        // 8. Save Walkthrough Artifact in hidden .gravity-worker/ (isolated from target repo commits)
         console.log(`📝 Generating walkthrough.md artifact...`);
         const walkthroughContent = generateWalkthrough({
           taskId,
@@ -171,7 +190,7 @@ export async function main(args: string[] = Deno.args) {
         });
         await saveArtifact(worktree.worktreePath, ".gravity-worker/walkthrough.md", walkthroughContent);
 
-        // 8. Commit & Push Worktree Changes if modified & success (artifacts in .gravity-worker/ are strictly excluded from commit)
+        // 9. Commit & Push Worktree Changes if modified & success (artifacts in .gravity-worker/ are strictly excluded from commit)
         if (result.success && !flags["dry-run"] && await hasChanges(worktree.worktreePath)) {
           console.log(`\n📤 Committing & pushing branch ${worktree.branchName}...`);
           await commitWorktreeChanges(worktree.worktreePath, `Fix #${taskId}: ${prompt}`);
@@ -179,7 +198,7 @@ export async function main(args: string[] = Deno.args) {
             console.warn(`[Git Push Warning] ${e.message}`);
           });
 
-          // 9. Create GitHub Pull Request linked with "Closes #issue" & Comment
+          // 10. Create GitHub Pull Request linked with "Closes #issue" & Comment
           if (githubToken && ghContext.repoOwner && ghContext.repoName) {
             console.log(`\n🔀 Creating GitHub Pull Request...`);
             const closesKeyword = ghContext.issueNumber ? `\n\nCloses #${ghContext.issueNumber}` : "";
@@ -200,11 +219,15 @@ export async function main(args: string[] = Deno.args) {
 
               if (ghContext.issueNumber) {
                 console.log(`💬 Posting completion comment to GitHub Issue #${ghContext.issueNumber}...`);
+                const completionIntro = isFinnish
+                  ? `Sain tehtävän valmiiksi! 🎉`
+                  : `I've completed this task! 🎉`;
+
                 await postIssueComment({
                   owner: ghContext.repoOwner,
                   repo: ghContext.repoName,
                   issueNumber: ghContext.issueNumber,
-                  body: `Sain tehtävän valmiiksi! 🎉\n\n**Pull Request:** ${prUrl}\n\n${walkthroughContent}`,
+                  body: `${completionIntro}\n\n**Pull Request:** ${prUrl}\n\n${walkthroughContent}`,
                   token: githubToken,
                 });
               }
@@ -212,7 +235,7 @@ export async function main(args: string[] = Deno.args) {
           }
         }
 
-        // 10. Result Summary
+        // 11. Result Summary
         console.log(`\n✨ Task #${taskId} ${result.success ? "COMPLETED" : "FAILED"} in ${(result.durationMs / 1000).toFixed(2)}s`);
         console.log(`- Branch: ${worktree.branchName}`);
         console.log(`- Worktree: ${worktree.worktreePath}`);

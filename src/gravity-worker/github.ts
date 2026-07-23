@@ -2,7 +2,7 @@
  * GravityWorker - GitHub API & Event Handler Module
  *
  * Handles parsing GitHub Action event payloads, posting comments to issues,
- * and creating Pull Requests via GitHub REST API.
+ * language detection, and creating Pull Requests via GitHub REST API.
  *
  * @module gravity-worker/github
  */
@@ -14,6 +14,15 @@ export interface GitHubEventContext {
   repoOwner?: string;
   repoName?: string;
   sender?: string;
+}
+
+/**
+ * Checks if the text prompt is written in Finnish based on Finnish letters or common vocabulary.
+ */
+export function isFinnishText(text: string): boolean {
+  if (/[\u00e4\u00f6\u00e5\u00c4\u00d6\u00c5]/i.test(text)) return true;
+  const fiWords = /\b(oletus|korjaa|lisää|luo|suorita|poista|muuta|päivitä|toiminto|virhe|ongelma|tehtävä)\b/i;
+  return fiWords.test(text);
 }
 
 /**

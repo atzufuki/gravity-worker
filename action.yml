@@ -21,6 +21,12 @@ inputs:
   gemini-api-key:
     description: 'API key for Antigravity engine'
     required: false
+  app-id:
+    description: 'GitHub App ID for dedicated gravity-worker[bot] identity'
+    required: false
+  private-key:
+    description: 'GitHub App Private Key for dedicated gravity-worker[bot] identity'
+    required: false
 
 outputs:
   status:
@@ -41,6 +47,8 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+        GRAVITY_WORKER_APP_ID: ${{ inputs.app-id }}
+        GRAVITY_WORKER_PRIVATE_KEY: ${{ inputs.private-key }}
       run: |
         deno run -A ${{ github.action_path }}/project/cli.ts run \
           --prompt "${{ inputs.prompt }}" \

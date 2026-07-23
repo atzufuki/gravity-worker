@@ -75,6 +75,109 @@ export async function exchangeManifestCode(code: string): Promise<GitHubAppCrede
 }
 
 /**
+ * Converts a PEM RSA private key string into a CryptoKey for signing RS256 JWTs.
+ */
+async function importRsaPrivateKey(pemKey: string): Promise<CryptoKey> {
+  const pemContents = pemKey
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/-----BEGIN RSA PRIVATE KEY-----/g, "")
+    .replace(/-----END RSA PRIVATE KEY-----/g, "")
+    .replace(/\s+/g, "");
+
+  const binaryDer = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
+  return await crypto.subtle.importKey(
+    "pkcs8",
+    binaryDer.buffer,
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      hash: "SHA-256",
+    },
+    false,
+    ["sign"],
+  );
+}
+
+/**
+ * Generates an RS256 signed JWT for GitHub App authentication.
+ */
+export async function createGitHubAppJwt(appId: string, privateKeyPem: string): Promise<string> {
+  const key = await importRsaPrivateKey(privateKeyPem);
+
+  const header = { alg: "RS256", typ: "JWT" };
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iat: now - 60,
+    exp: now + 600,
+    iss: appId,
+  };
+
+  const encodeBase64Url = (obj: unknown) =>
+    btoa(JSON.stringify(obj))
+      .replace(/=/g, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+
+  const unsignedToken = `${encodeBase64Url(header)}.${encodeBase64Url(payload)}`;
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(unsignedToken),
+  );
+
+  const signatureBase64Url = btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+
+  return `${unsignedToken}.${signatureBase64Url}`;
+}
+
+/**
+ * Retrieves a short-lived installation access token for a repository using GitHub App credentials.
+ */
+export async function getAppInstallationToken(
+  appId: string,
+  privateKeyPem: string,
+  owner: string,
+  repo: string,
+): Promise<string | null> {
+  try {
+    const jwt = await createGitHubAppJwt(appId, privateKeyPem);
+
+    // 1. Get installation for repository
+    const instRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/installation`, {
+      headers: {
+        "Accept": "application/vnd.github.v3+json",
+        "Authorization": `Bearer ${jwt}`,
+        "User-Agent": "GravityWorker",
+      },
+    });
+
+    if (!instRes.ok) return null;
+    const instData = await instRes.json();
+    const installationId = instData.id;
+
+    // 2. Create access token
+    const tokenRes = await fetch(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
+      method: "POST",
+      headers: {
+        "Accept": "application/vnd.github.v3+json",
+        "Authorization": `Bearer ${jwt}`,
+        "User-Agent": "GravityWorker",
+      },
+    });
+
+    if (!tokenRes.ok) return null;
+    const tokenData = await tokenRes.json();
+    return tokenData.token ?? null;
+  } catch (err) {
+    console.warn(`[GitHub App Auth] Unable to obtain installation token:`, err);
+    return null;
+  }
+}
+
+/**
  * Starts a temporary local HTTP server on http://localhost:3000 to auto-submit the GitHub App
  * manifest POST form (pre-filling 100% of fields) and receive the callback.
  */
@@ -271,6 +374,8 @@ jobs:
           issue-id: \${{ github.event.issue.number }}
           github-token: \${{ secrets.GITHUB_TOKEN }}
           gemini-api-key: \${{ secrets.GEMINI_API_KEY }}
+          app-id: \${{ secrets.GRAVITY_WORKER_APP_ID }}
+          private-key: \${{ secrets.GRAVITY_WORKER_PRIVATE_KEY }}
 `;
 
   await Deno.writeTextFile(workflowPath, content);

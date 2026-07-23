@@ -3,7 +3,12 @@
  */
 
 import { assertEquals, assert } from "@std/assert";
-import { getGitHubContext } from "../github.ts";
+import { getGitHubContext, isFinnishText } from "../github.ts";
+
+Deno.test("GitHub Module - language detection", () => {
+  assertEquals(isFinnishText("Lisää .env.example juureen"), true);
+  assertEquals(isFinnishText("Add .env.example to repository root"), false);
+});
 
 Deno.test("GitHub Module - get context fallback without event file", async () => {
   const ctx = await getGitHubContext();
