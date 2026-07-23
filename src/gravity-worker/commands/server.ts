@@ -17,6 +17,28 @@ export interface ServerOptions {
   agent?: string;
 }
 
+async function resolveGitHubToken(): Promise<string | undefined> {
+  const envToken = Deno.env.get("GITHUB_TOKEN");
+  if (envToken) return envToken;
+
+  try {
+    const cmd = new Deno.Command("gh", {
+      args: ["auth", "token"],
+      stdout: "piped",
+      stderr: "piped",
+    });
+    const output = await cmd.output();
+    if (output.success) {
+      const token = new TextDecoder().decode(output.stdout).trim();
+      if (token) return token;
+    }
+  } catch {
+    // Ignore
+  }
+
+  return undefined;
+}
+
 export class ServerCommand extends BaseCommand {
   override name = "server";
   override help = "Listen for GitHub issue 'gravity-fix' labels and execute tasks automatically on local workstation";
@@ -59,7 +81,7 @@ export class ServerCommand extends BaseCommand {
       return { exitCode: 1 };
     }
 
-    const token = Deno.env.get("GITHUB_TOKEN");
+    const token = await resolveGitHubToken();
     const [owner, repo] = repoSpec.split("/");
 
     console.log("=======================================================");
@@ -69,6 +91,7 @@ export class ServerCommand extends BaseCommand {
     console.log(`- Agent Engine:      ${agentEngine.toUpperCase()} (Local Machine)`);
     console.log(`- Watch Label:       gravity-fix`);
     console.log(`- Polling Interval:  ${pollInterval / 1000}s`);
+    console.log(`- GitHub Auth:       ${token ? "Authenticated (via gh / token)" : "Anonymous (Public Repos only)"}`);
     console.log("-------------------------------------------------------");
     console.log("Listening for labeled issues on GitHub... Press Ctrl+C to stop.\n");
 
@@ -126,10 +149,15 @@ export class ServerCommand extends BaseCommand {
                   ? ["run", "-A", `${Deno.cwd()}/project/cli.ts`, "run", "--issue", String(issueNum), "--prompt", issueTitle, "--agent", agentEngine]
                   : ["run", "--issue", String(issueNum), "--prompt", issueTitle, "--agent", agentEngine];
 
+                const childEnv = { ...Deno.env.toObject() };
+                if (token) {
+                  childEnv["GITHUB_TOKEN"] = token;
+                }
+
                 const runCmd = new Deno.Command(execPath, {
                   args: runArgs,
                   cwd: targetDir,
-                  env: Deno.env.toObject(),
+                  env: childEnv,
                   stdout: "inherit",
                   stderr: "inherit",
                 });
@@ -141,6 +169,9 @@ export class ServerCommand extends BaseCommand {
               }
             }
           }
+        } else {
+          const errText = await res.text();
+          console.warn(`[Daemon Warning] GitHub API returned ${res.status}: ${errText.substring(0, 100)}`);
         }
       } catch (e) {
         console.warn(`[Daemon Watcher Warning] Error checking GitHub issues:`, e);
