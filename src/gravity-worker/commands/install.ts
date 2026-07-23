@@ -3,8 +3,8 @@
  *
  * Automated 100% Zero-Touch GitHub Setup & Installation for GravityWorker.
  * Creates GitHub App via auto-submitted manifest POST form, configures workflow permissions,
- * injects secrets (including AGY_CREDENTIALS & GEMINI_API_KEY), commits workflow file,
- * and launches App Installation in browser.
+ * prompts user to choose authentication method (AGY_CREDENTIALS vs GEMINI_API_KEY),
+ * injects secrets, commits workflow file, and launches App Installation in browser.
  *
  * @module gravity-worker/commands/install
  */
@@ -194,23 +194,51 @@ export class InstallCommand extends BaseCommand {
         console.warn("⚠️ Warning: Could not push workflow file via Git:", e);
       }
 
-      // 3. Automate Secret Injection via gh CLI
+      // 3. Automate Secret Injection via gh CLI with interactive auth choice
       console.log(`\n4️⃣ Injecting repository secrets to ${repoSpec ?? "current repository"}...`);
       const appSaved = await setRepoSecretWithGh("GRAVITY_WORKER_APP_ID", creds.appId, repoSpec);
       const keySaved = await setRepoSecretWithGh("GRAVITY_WORKER_PRIVATE_KEY", creds.privateKey, repoSpec);
 
-      // Check & Inject AGY_CREDENTIALS
-      const agyCreds = await resolveAgyCredentials();
-      if (agyCreds) {
-        await setRepoSecretWithGh("AGY_CREDENTIALS", agyCreds, repoSpec);
-        console.log("✓ Injected AGY_CREDENTIALS (Antigravity CLI OAuth Token) to repository secrets.");
+      console.log("\n🔐 Select Authentication Method for GitHub Actions AI Engine:");
+      console.log("   1) Antigravity CLI Session Token (AGY_CREDENTIALS) [Full agy engine]");
+      console.log("   2) Gemini API Key (GEMINI_API_KEY)                 [Zero-dependency engine]");
+
+      let selectedAuth: "1" | "2" = "1";
+      if (Deno.stdin.isTerminal()) {
+        const inputChoice = prompt("\nChoice (1 or 2) [default: 1]: ");
+        if (inputChoice?.trim() === "2") {
+          selectedAuth = "2";
+        }
       }
 
-      // Check & Inject GEMINI_API_KEY
-      const geminiApiKey = await resolveGeminiApiKey(options, targetDir);
-      if (geminiApiKey) {
-        await setRepoSecretWithGh("GEMINI_API_KEY", geminiApiKey, repoSpec);
-        console.log("✓ Injected GEMINI_API_KEY to repository secrets.");
+      if (selectedAuth === "1") {
+        console.log("\n🔍 Resolving AGY_CREDENTIALS...");
+        let agyCreds = await resolveAgyCredentials();
+        if (!agyCreds && Deno.stdin.isTerminal()) {
+          const manualInput = prompt("Enter / Paste AGY_CREDENTIALS JSON: ");
+          if (manualInput?.trim()) agyCreds = manualInput.trim();
+        }
+
+        if (agyCreds) {
+          await setRepoSecretWithGh("AGY_CREDENTIALS", agyCreds, repoSpec);
+          console.log("✓ Injected AGY_CREDENTIALS (Antigravity CLI OAuth Token) to repository secrets.");
+        } else {
+          console.log("⚠️ Could not resolve AGY_CREDENTIALS. Set it manually using: gh secret set AGY_CREDENTIALS");
+        }
+      } else {
+        console.log("\n🔍 Resolving GEMINI_API_KEY...");
+        let geminiKey = await resolveGeminiApiKey(options, targetDir);
+        if (!geminiKey && Deno.stdin.isTerminal()) {
+          const manualInput = prompt("Enter / Paste GEMINI_API_KEY: ");
+          if (manualInput?.trim()) geminiKey = manualInput.trim();
+        }
+
+        if (geminiKey) {
+          await setRepoSecretWithGh("GEMINI_API_KEY", geminiKey, repoSpec);
+          console.log("✓ Injected GEMINI_API_KEY to repository secrets.");
+        } else {
+          console.log("⚠️ Could not resolve GEMINI_API_KEY. Set it manually using: gh secret set GEMINI_API_KEY");
+        }
       }
 
       if (appSaved && keySaved) {
