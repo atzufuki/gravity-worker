@@ -111,7 +111,9 @@ export class UninstallCommand extends BaseCommand {
 
     console.log("\n=======================================================");
     console.log("✨ GRAVITYWORKER UNINSTALLED SUCCESSFULLY!");
-    console.log("=======================================================\n");
+    console.log("=======================================================");
+    console.log("💡 To view or delete registered GitHub Apps from your GitHub account, visit:");
+    console.log("   https://github.com/settings/apps\n");
 
     return { exitCode: 0 };
   }

@@ -76,10 +76,14 @@ export class InstallCommand extends BaseCommand {
       console.log(`📌 Target directory: ${targetDir}\n`);
     }
 
-    const manifestAppName = repoSpec ? `gravity-worker-${repoSpec.split("/")[1] ?? "app"}` : "gravity-worker";
+    // Append 4-digit random suffix to prevent global GitHub App name collision ("Name is already taken")
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const repoBase = repoSpec ? repoSpec.split("/")[1]?.replace(/[^a-zA-Z0-9-]/g, "-") ?? "app" : "app";
+    const manifestAppName = `gravity-worker-${repoBase}-${randomSuffix}`;
     const localUrl = "http://localhost:3000";
 
     console.log("1️⃣ Starting local setup server and opening browser...");
+    console.log(`   App Name: ${manifestAppName}`);
     console.log(`   URL: ${localUrl}\n`);
 
     // Start local server to handle POST form auto-submit & OAuth callback
