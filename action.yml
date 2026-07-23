@@ -1,0 +1,48 @@
+name: 'GravityWorker Agent'
+description: 'Universal AI Agent Runner & Orchestrator for Git Worktrees & CI'
+branding:
+  icon: 'cpu'
+  color: 'purple'
+
+inputs:
+  prompt:
+    description: 'Instructions / Prompt for the AI agent'
+    required: false
+  agent:
+    description: 'AI agent engine to use (default: antigravity)'
+    required: false
+    default: 'antigravity'
+  issue-id:
+    description: 'GitHub Issue ID being processed'
+    required: false
+  github-token:
+    description: 'GitHub Token for posting comments and PRs'
+    required: false
+  gemini-api-key:
+    description: 'API key for Antigravity engine'
+    required: false
+
+outputs:
+  status:
+    description: 'Execution status (success or failure)'
+  branch:
+    description: 'Created Git worktree branch name'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Deno Environment
+      uses: denoland/setup-deno@v2
+      with:
+        deno-version: v2.x
+
+    - name: Run GravityWorker CLI
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+      run: |
+        deno run -A ${{ github.action_path }}/project/cli.ts run \
+          --prompt "${{ inputs.prompt }}" \
+          --agent "${{ inputs.agent }}" \
+          --issue "${{ inputs.issue-id }}"

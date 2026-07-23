@@ -1,0 +1,42 @@
+# Built binaries
+gravity-worker
+gravity-worker-*
+bin/
+dist/
+
+# Worktree isolation
+.worktrees/
+
+# Dependencies
+node_modules/
+
+# Static & Build cache
+.parcel-cache/
+static/
+
+# Database
+*.db
+*.sqlite
+
+# Environment secrets
+.env
+.env.local
+.env.*.local
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage & Temporary
+coverage/
+tmp/
+temp/

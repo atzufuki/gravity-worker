@@ -1,0 +1,45 @@
+name: GravityWorker Agent Automation
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Task instructions for GravityWorker'
+        required: true
+      agent:
+        description: 'Agent engine (default: antigravity)'
+        required: false
+        default: 'antigravity'
+
+jobs:
+  gravity-worker:
+    # Trigger if issue labeled 'gravity-fix' OR comment mentions '@gravity-worker' OR manual dispatch
+    if: >-
+      (github.event_name == 'issues' && github.event.label.name == 'gravity-fix') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@gravity-worker')) ||
+      (github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run GravityWorker Agent
+        uses: ./
+        with:
+          prompt: ${{ github.event.inputs.prompt || github.event.issue.title || github.event.comment.body }}
+          agent: ${{ github.event.inputs.agent || 'antigravity' }}
+          issue-id: ${{ github.event.issue.number }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}

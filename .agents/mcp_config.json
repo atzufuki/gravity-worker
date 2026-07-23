@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "antigravity-docs": {
+      "command": "deno",
+      "args": [
+        "run",
+        "--allow-read",
+        "--allow-net",
+        "/home/atzufuki/Code/decksmith/.agents/mcp-server/antigravity_docs.ts"
+      ]
+    },
+    "alexi-docs": {
+      "command": "deno",
+      "args": [
+        "run",
+        "--allow-read",
+        "--allow-net",
+        "/home/atzufuki/Code/decksmith/.agents/mcp-server/alexi_docs.ts"
+      ]
+    },
+    "html-props-docs": {
+      "command": "deno",
+      "args": [
+        "run",
+        "--allow-read",
+        "--allow-net",
+        "/home/atzufuki/Code/decksmith/.agents/mcp-server/html_props_docs.ts"
+      ]
+    },
+    "deno-docs": {
+      "command": "deno",
+      "args": [
+        "run",
+        "--allow-read",
+        "--allow-net",
+        "/home/atzufuki/Code/decksmith/.agents/mcp-server/deno_docs.ts"
+      ]
+    }
+  }
+}
