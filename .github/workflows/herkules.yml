@@ -29,12 +29,12 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Deno
+      - name: Setup Deno Environment
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
@@ -68,7 +68,7 @@ jobs:
           private-key: ${{ secrets.HERKULES_PRIVATE_KEY }}
         continue-on-error: true
 
-      - name: Check Local Antigravity Proxy Tunnel Availability
+      - name: Check Antigravity Local Proxy Status
         id: check-proxy
         run: |
           RELAY_URL="${{ secrets.HERKULES_RELAY_URL || 'https://herkules.atzufuki.deno.net' }}"
@@ -84,7 +84,7 @@ jobs:
             echo "ℹ️ Local tunnel offline (HTTP $STATUS). Running natively in Cloud Gemini API."
           fi
 
-      - name: Run Herkules Agent
+      - name: Execute Herkules AI Agent Task
         uses: atzufuki/herkules@main
         with:
           prompt: ${{ github.event.inputs.prompt || github.event.issue.title || github.event.comment.body }}
