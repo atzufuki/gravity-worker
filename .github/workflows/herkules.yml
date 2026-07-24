@@ -87,7 +87,7 @@ jobs:
       - name: Execute Herkules AI Agent Task
         uses: atzufuki/herkules@main
         with:
-          prompt: ${{ github.event.inputs.prompt || github.event.issue.title || github.event.comment.body }}
+          prompt: ${{ github.event.comment.body || github.event.inputs.prompt || github.event.issue.title }}
           agent: ${{ github.event.inputs.agent || 'antigravity' }}
           issue-id: ${{ github.event.issue.number }}
           github-token: ${{ steps.fetch-relay-token.outputs.token || steps.generate-app-token.outputs.token || secrets.GITHUB_TOKEN }}
