@@ -20,7 +20,7 @@ import {
 } from "@herkules/git.ts";
 import { AgentRunnerFactory, applyFallbackFileWrites, generateAiMessage } from "@herkules/runner.ts";
 import { generateCodeReview, generateImplementationPlan, generateWalkthrough, saveArtifact } from "@herkules/artifacts.ts";
-import { addReactionToIssueOrComment, createPullRequest, getGitHubContext, getRepoFromGitRemote, postIssueComment } from "@herkules/github.ts";
+import { addReactionToIssueOrComment, createPullRequest, getGitHubContext, getRepoFromGitRemote, isFinnishText, postIssueComment } from "@herkules/github.ts";
 import { getAppInstallationToken, loadEnvFiles } from "@herkules/github_app.ts";
 import { generateConventionalMetadata } from "@herkules/conventional.ts";
 import { formatCommandResponse, parseCommentCommand } from "@herkules/commands.ts";
@@ -281,7 +281,38 @@ export async function main(args: string[] = Deno.args) {
 
         // Handle @herkules-bot plan command early exit (plan-only generation)
         if (parsedCmd.command === "plan") {
-          console.log(`📋 Processed @herkules-bot plan command.`);
+          console.log(`📋 Generating AI Implementation Plan for @herkules-bot plan...`);
+          const isFinnish = isFinnishText(effectivePrompt);
+          const planPrompt = isFinnish
+            ? `Laadi selkeä, inhimillinen ja ihmisymmärrettävä toteutussuunnitelma (suomeksi) tehtävälle: "${effectivePrompt}". Kuvaa kattavasti mitä tiedostoja/moduuleja luodaan tai muokataan ja miten toteutus testataan. ÄLÄ käytä robottimaisia otsikoita tai aikaleimoja.`
+            : `Create a clear, comprehensive, human-readable step-by-step implementation plan for: "${effectivePrompt}". Explain in detail what modules/files will be created or modified, how logic will be structured, and how tests will verify completion. Do NOT include robotic template headers or timestamps.`;
+
+          let planContent = "";
+          const proxyUrl = flags.proxy ?? Deno.env.get("HERKULES_PROXY_URL") ?? Deno.env.get("GRAVITY_WORKER_PROXY_URL");
+
+          if (proxyUrl) {
+            try {
+              const resp = await fetch(`${proxyUrl}/api/execute`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Bypass-Tunnel-Remainder": "true", "User-Agent": "Herkules" },
+                signal: AbortSignal.timeout(60000),
+                body: JSON.stringify({ prompt: planPrompt, issueNum, repoSpec: ghContext.repoOwner && ghContext.repoName ? `${ghContext.repoOwner}/${ghContext.repoName}` : undefined }),
+              });
+              if (resp.ok) {
+                const data = await resp.json();
+                planContent = data.logs || data.output || "";
+              }
+            } catch {
+              // Fallback to static helper
+            }
+          }
+
+          if (!planContent || planContent.length < 30) {
+            planContent = generateImplementationPlan({ taskId, prompt: effectivePrompt, agentName: flags.agent });
+          }
+
+          await saveArtifact(worktree.worktreePath, ".herkules/implementation_plan.md", planContent);
+
           const planCmdRes = formatCommandResponse("plan", {
             prompt: effectivePrompt,
             content: planContent,

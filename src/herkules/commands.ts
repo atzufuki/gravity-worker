@@ -161,13 +161,10 @@ export function formatCommandResponse(
 
   switch (command) {
     case "plan": {
-      const header = `📋 **Herkules Implementation Plan**`;
-      const promptSection = prompt ? `\n\n**Task:** ${prompt}` : "";
-      const body = `${header}${promptSection}\n\n${content}`;
       return {
         command: "plan",
         title: "Implementation Plan",
-        body,
+        body: content,
         success: true,
         artifactIdentifier: ".herkules/implementation_plan.md",
       };

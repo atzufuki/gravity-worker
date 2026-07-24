@@ -108,8 +108,7 @@ Deno.test("Comment Commands - formatCommandResponse for plan", () => {
   assertEquals(response.command, "plan");
   assertEquals(response.success, true);
   assertEquals(response.artifactIdentifier, ".herkules/implementation_plan.md");
-  assertEquals(response.body.includes("📋 **Herkules Implementation Plan**"), true);
-  assertEquals(response.body.includes("Add auth middleware"), true);
+  assertEquals(response.body.includes("Step 1: Create auth.ts"), true);
 });
 
 Deno.test("Comment Commands - formatCommandResponse for review", () => {

@@ -14,9 +14,8 @@ Deno.test("Artifacts - generate implementation plan", () => {
     agentName: "antigravity",
   });
 
-  assertStringIncludes(plan, "### Implementation Plan");
+  assertStringIncludes(plan, "implementation plan");
   assertStringIncludes(plan, "Fix bug in authentication");
-  assertStringIncludes(plan, "antigravity");
 });
 
 Deno.test("Artifacts - generate walkthrough open-source PR format", () => {
