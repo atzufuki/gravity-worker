@@ -6,6 +6,7 @@
     "serve": "deno serve -A --unstable-kv project/http.ts",
     "deploy": "deno run -A jsr:@deno/deployctl deploy --project=herkules --entrypoint=project/http.ts",
     "test": "deno test -A --unstable-kv src/",
+    "review": "deno run -A src/cli/cli.ts review",
     "compile": "deno compile -A --unstable-kv -o herkules src/cli/cli.ts"
   },
   "imports": {
@@ -27,6 +28,8 @@
     "@alexi/storage/backends/filesystem": "jsr:@alexi/storage@^0.53.6/backends/filesystem",
     "@alexi/storage/backends/memory": "jsr:@alexi/storage@^0.53.6/backends/memory",
     "@alexi/types": "jsr:@alexi/types@^0.53.6",
+    "@herkules/reviewer": "./src/herkules/reviewer/mod.ts",
+    "@herkules/reviewer/": "./src/herkules/reviewer/",
     "@herkules/": "./src/herkules/",
     "@cli/": "./src/cli/",
     "@web/": "./src/web/"

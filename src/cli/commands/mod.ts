@@ -10,6 +10,7 @@ export { ServerCommand } from "@cli/commands/server.ts";
 export { ProxyCommand } from "@cli/commands/proxy.ts";
 export { ListWorktreesCommand } from "@cli/commands/list_worktrees.ts";
 export { CleanWorktreesCommand } from "@cli/commands/clean_worktrees.ts";
+export { ReviewerCommand } from "@cli/commands/reviewer.ts";
 
 export const cli_commands = [
   new (await import("@cli/commands/install.ts")).InstallCommand(),
@@ -18,4 +19,5 @@ export const cli_commands = [
   new (await import("@cli/commands/proxy.ts")).ProxyCommand(),
   new (await import("@cli/commands/list_worktrees.ts")).ListWorktreesCommand(),
   new (await import("@cli/commands/clean_worktrees.ts")).CleanWorktreesCommand(),
+  new (await import("@cli/commands/reviewer.ts")).ReviewerCommand(),
 ];

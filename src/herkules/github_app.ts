@@ -467,8 +467,8 @@ on:
 jobs:
   herkules:
     if: >-
-      (github.event_name == 'issues' && github.event.label.name == 'herkules' && github.actor != 'herkules-bot[bot]') ||
-      (github.event_name == 'issue_comment' && (contains(github.event.comment.body, '@herkules-bot') || contains(github.event.comment.body, '@herkules'))) ||
+      (github.event_name == 'issues' && github.event.label.name == 'herkules' && github.event.sender.type != 'Bot') ||
+      (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot' && (contains(github.event.comment.body, '@herkules-bot') || contains(github.event.comment.body, '@herkules'))) ||
       (github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
 

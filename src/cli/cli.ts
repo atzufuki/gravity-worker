@@ -39,6 +39,7 @@ COMMANDS:
   proxy        Start local Antigravity (agy) execution proxy server for GitHub Actions CI
   server       Alias for 'proxy' (starts execution proxy server)
   run          Execute a single agent task locally or in CI
+  review       Automated AI PR code reviewer with configurable auto-merge
   install      Setup Herkules for GitHub Actions CI or Local Workstations
   uninstall    Remove Herkules workflow & secrets from target repository
   status       Check status of current worker / worktrees
@@ -53,6 +54,7 @@ OPTIONS:
   -k, --key <api_key>    GEMINI_API_KEY to inject into GitHub secrets
       --proxy <url>      Delegate execution to local Antigravity proxy server
   -w, --worktree [name]  Run in an isolated Git worktree (default: true)
+      --auto-merge       Automatically merge PR when verification & AI review pass
       --keep-worktree    Keep worktree directory after execution
       --dry-run          Simulate execution without making changes
   -h, --help             Show help for command
@@ -64,6 +66,9 @@ EXAMPLES:
 
   # Automated Installation Wizard (GitHub Actions CI or Local Workstation)
   herkules install
+
+  # Run automated AI code review on PR #42 with auto-merge enabled
+  herkules review --pr 42 --auto-merge
 
   # Run a prompt locally in an isolated worktree
   herkules run --prompt "Fix bug in auth middleware"
@@ -83,9 +88,10 @@ export async function main(args: string[] = Deno.args) {
       w: "worktree",
       r: "repo",
       k: "key",
+      m: "auto-merge",
     },
-    boolean: ["help", "version", "dry-run", "keep-worktree"],
-    string: ["prompt", "agent", "issue", "worktree", "repo", "key", "proxy"],
+    boolean: ["help", "version", "dry-run", "keep-worktree", "auto-merge", "mock"],
+    string: ["prompt", "agent", "issue", "worktree", "repo", "key", "proxy", "pr", "branch", "test-cmd", "lint-cmd", "base-branch"],
     default: {
       agent: "antigravity",
     },
@@ -108,6 +114,13 @@ export async function main(args: string[] = Deno.args) {
     case "server": {
       const { ProxyCommand } = await import("@cli/commands/proxy.ts");
       const cmd = new ProxyCommand();
+      const res = await cmd.handle(flags);
+      Deno.exit(res.exitCode);
+      break;
+    }
+    case "review": {
+      const { ReviewerCommand } = await import("@cli/commands/reviewer.ts");
+      const cmd = new ReviewerCommand();
       const res = await cmd.handle(flags);
       Deno.exit(res.exitCode);
       break;
@@ -218,6 +231,12 @@ export async function main(args: string[] = Deno.args) {
         } catch {
           // Fall back to default githubToken
         }
+      }
+
+      // Safety guard: ignore execution if triggered by a bot user's own comment
+      if (ghContext.sender && (ghContext.sender.endsWith("[bot]") || ghContext.sender === "herkules-bot" || ghContext.sender === "herkules")) {
+        console.log(`ℹ️ Ignoring execution trigger initiated by bot user: @${ghContext.sender}`);
+        return;
       }
 
       const issueNum = ghContext.issueNumber ?? (flags.issue ? parseInt(flags.issue, 10) : undefined);
