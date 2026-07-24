@@ -13,6 +13,7 @@ export interface RunOptions {
   worktreePath: string;
   dryRun?: boolean;
   env?: Record<string, string>;
+  onChunk?: (chunk: string) => void;
 }
 
 export interface RunResult {
@@ -246,6 +247,7 @@ export class GeminiRunner implements AgentRunner {
     }
 
     try {
+      options.onChunk?.(`🤖 [Gemini API] Gathering repository context at ${worktreePath}...\n`);
       // 1. Gather repository context (list non-hidden files)
       const files: string[] = [];
       try {
@@ -269,18 +271,22 @@ If you need to create or update files, include a JSON block in your response for
 \`\`\`
 Summarize what you accomplished concisely.`;
 
+      options.onChunk?.(`⚡ [Gemini API] Sending prompt to Gemini model (${DEFAULT_GEMINI_MODEL})...\n`);
       const res = await callGeminiApi(apiKey, `${systemInstruction}\n\nTask: ${prompt}`);
 
       if (!res.ok) {
+        const errStr = `Gemini API HTTP ${res.status}: ${res.rawError || "Unknown error"}`;
+        options.onChunk?.(`❌ ${errStr}\n`);
         return {
           success: false,
           output: "",
-          error: `Gemini API HTTP ${res.status}: ${res.rawError || "Unknown error"}`,
+          error: errStr,
           durationMs: Date.now() - startTime,
         };
       }
 
       const textOutput = res.text;
+      options.onChunk?.(`\n${textOutput}\n`);
 
       // Parse and apply file writes if present
       const jsonMatch = textOutput.match(/```json\s*(\[\s*\{[\s\S]*\}\s*\])\s*```/) || textOutput.match(/(\[\s*\{[\s\S]*\}\s*\])/);
@@ -293,7 +299,9 @@ Summarize what you accomplished concisely.`;
               const parentDir = dirname(fullPath);
               await Deno.mkdir(parentDir, { recursive: true });
               await Deno.writeTextFile(fullPath, item.content);
-              console.log(`[GeminiRunner] Applied file change: ${item.path}`);
+              const msg = `✨ [Gemini API] Applied file change: ${item.path}`;
+              console.log(msg);
+              options.onChunk?.(`${msg}\n`);
             }
           }
         } catch (e) {
@@ -338,12 +346,15 @@ export class AntigravityRunner implements AgentRunner {
 
     const isCi = Deno.env.get("GITHUB_ACTIONS") === "true" || Deno.env.get("CI") === "true";
     if (isCi) {
-      console.log(`[AntigravityRunner] Running in CI environment. Executing via Gemini API Cloud Runner...`);
+      const msg = `[AntigravityRunner] Running in CI environment. Executing via Gemini API Cloud Runner...\n`;
+      console.log(msg.trim());
+      options.onChunk?.(msg);
       const geminiRunner = new GeminiRunner();
       return await geminiRunner.run(options);
     }
 
     try {
+      options.onChunk?.(`🚀 Executing Antigravity ('agy') CLI agent in ${worktreePath}...\n`);
       const command = new Deno.Command("agy", {
         args: ["--print", prompt, "--dangerously-skip-permissions", "--print-timeout", "5m"],
         cwd: worktreePath,
@@ -352,9 +363,37 @@ export class AntigravityRunner implements AgentRunner {
         stderr: "piped",
       });
 
-      const output = await command.output();
-      const stdout = new TextDecoder().decode(output.stdout);
-      const stderr = new TextDecoder().decode(output.stderr);
+      const child = command.spawn();
+      let stdout = "";
+      let stderr = "";
+
+      const processStream = async (
+        stream: ReadableStream<Uint8Array>,
+        isStdout: boolean,
+      ) => {
+        const decoder = new TextDecoder();
+        for await (const chunk of stream) {
+          const text = decoder.decode(chunk, { stream: true });
+          if (text) {
+            if (isStdout) stdout += text;
+            else stderr += text;
+            options.onChunk?.(text);
+          }
+        }
+        const remaining = decoder.decode();
+        if (remaining) {
+          if (isStdout) stdout += remaining;
+          else stderr += remaining;
+          options.onChunk?.(remaining);
+        }
+      };
+
+      await Promise.all([
+        processStream(child.stdout, true),
+        processStream(child.stderr, false),
+      ]);
+
+      const status = await child.status;
       const fullText = `${stdout}\n${stderr}`;
 
       // Check for OAuth / authentication prompt
@@ -365,7 +404,9 @@ export class AntigravityRunner implements AgentRunner {
       ) {
         const hasApiKey = (env?.GEMINI_API_KEY ?? Deno.env.get("GEMINI_API_KEY")) !== undefined;
         if (hasApiKey) {
-          console.log(`[AntigravityRunner] 'agy' CLI requires OAuth login. Falling back to Gemini API Runner...`);
+          const msg = `[AntigravityRunner] 'agy' CLI requires OAuth login. Falling back to Gemini API Runner...\n`;
+          console.log(msg.trim());
+          options.onChunk?.(msg);
           const geminiRunner = new GeminiRunner();
           return await geminiRunner.run(options);
         }
@@ -377,27 +418,31 @@ export class AntigravityRunner implements AgentRunner {
         };
       }
 
-      if (!output.success) {
+      if (!status.success) {
         // Fallback to Gemini API runner if agy CLI error
         const hasApiKey = (env?.GEMINI_API_KEY ?? Deno.env.get("GEMINI_API_KEY")) !== undefined;
         if (hasApiKey) {
-          console.log(`[AntigravityRunner] 'agy' CLI error (${stderr.trim()}). Falling back to Gemini API Runner...`);
+          const msg = `[AntigravityRunner] 'agy' CLI error (${stderr.trim()}). Falling back to Gemini API Runner...\n`;
+          console.log(msg.trim());
+          options.onChunk?.(msg);
           const geminiRunner = new GeminiRunner();
           return await geminiRunner.run(options);
         }
       }
 
       return {
-        success: output.success,
+        success: status.success,
         output: stdout.trim() || stderr.trim(),
-        error: output.success ? undefined : stderr.trim(),
+        error: status.success ? undefined : stderr.trim(),
         durationMs: Date.now() - startTime,
       };
     } catch (err) {
       // Fallback to Gemini API runner if agy binary is not installed in PATH
       const hasApiKey = (env?.GEMINI_API_KEY ?? Deno.env.get("GEMINI_API_KEY")) !== undefined;
       if (hasApiKey) {
-        console.log(`[AntigravityRunner] 'agy' binary not found in PATH. Falling back to Gemini API Runner...`);
+        const msg = `[AntigravityRunner] 'agy' binary not found in PATH. Falling back to Gemini API Runner...\n`;
+        console.log(msg.trim());
+        options.onChunk?.(msg);
         const geminiRunner = new GeminiRunner();
         return await geminiRunner.run(options);
       }

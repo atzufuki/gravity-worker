@@ -301,7 +301,16 @@ export class ProxyCommand extends BaseCommand {
             let result: { success: boolean; output: string; durationMs: number; error?: string };
             try {
               const runner = new AntigravityRunner();
-              result = await runner.run({ prompt: body.prompt, worktreePath });
+              console.log(`\n🧠 [Antigravity Stream] Agent thought stream & execution log:`);
+              console.log(`-------------------------------------------------------`);
+              result = await runner.run({
+                prompt: body.prompt,
+                worktreePath,
+                onChunk: (chunk) => {
+                  Deno.stdout.writeSync(new TextEncoder().encode(chunk));
+                },
+              });
+              console.log(`\n-------------------------------------------------------`);
               await applyFallbackFileWrites(body.prompt, result.output, worktreePath);
             } finally {
               // File collection runs next
