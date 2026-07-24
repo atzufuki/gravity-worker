@@ -283,9 +283,23 @@ export async function main(args: string[] = Deno.args) {
         if (parsedCmd.command === "plan") {
           console.log(`📋 Generating AI Implementation Plan for @herkules-bot plan...`);
           const isFinnish = isFinnishText(effectivePrompt);
+          const planIntro = await generateAiMessage(effectivePrompt, "plan");
+
           const planPrompt = isFinnish
-            ? `Laadi selkeä, inhimillinen ja ihmisymmärrettävä toteutussuunnitelma (suomeksi) tehtävälle: "${effectivePrompt}". Kuvaa kattavasti mitä tiedostoja/moduuleja luodaan tai muokataan ja miten toteutus testataan. ÄLÄ käytä robottimaisia otsikoita tai aikaleimoja.`
-            : `Create a clear, comprehensive, human-readable step-by-step implementation plan for: "${effectivePrompt}". Explain in detail what modules/files will be created or modified, how logic will be structured, and how tests will verify completion. Do NOT include robotic template headers or timestamps.`;
+            ? `Olet Herkules, innokas ja ystävällinen tekoälyassistentti. Laadi tiivis, inhimillinen ja ihmisymmärrettävä toteutussuunnitelma (suomeksi) tehtävälle: "${effectivePrompt}".
+Aloita teksti tästä tervehdyksestä: "${planIntro}"
+Kuvaa tiiviisti 3 selkeässä osiossa:
+1. Tiedostomuutokset (käytä TypeScript/Deno -muotoa: src/...)
+2. Ydinlogiikka
+3. Verifiointi & testaus (deno task test)
+ÄLÄ käytä robottimaisia lauseita kuten "An implementation plan has been prepared and documented at...". ÄLÄkä käytä python-tiedostoja (.py). Pidä teksti innokkaana, tiiviinä ja ihmiselle miellyttävänä lukea.`
+            : `You are Herkules, an enthusiastic and friendly AI coding assistant. Create a concise, warm, human-readable implementation plan for: "${effectivePrompt}".
+Start with this greeting: "${planIntro}"
+Summarize clearly in 3 concise sections:
+1. Architecture & Files (use TypeScript/Deno layout: src/...)
+2. Core Logic & Features
+3. Verification (deno task test)
+Do NOT use stiff robotic statements like "An implementation plan has been prepared and documented at...". Do NOT use python files (.py). Keep it energetic, concise, and natural to read.`;
 
           let planContent = "";
           const proxyUrl = flags.proxy ?? Deno.env.get("HERKULES_PROXY_URL") ?? Deno.env.get("GRAVITY_WORKER_PROXY_URL");
@@ -308,7 +322,7 @@ export async function main(args: string[] = Deno.args) {
           }
 
           if (!planContent || planContent.length < 30) {
-            planContent = generateImplementationPlan({ taskId, prompt: effectivePrompt, agentName: flags.agent });
+            planContent = `${planIntro}\n\n${generateImplementationPlan({ taskId, prompt: effectivePrompt, agentName: flags.agent })}`;
           }
 
           await saveArtifact(worktree.worktreePath, ".herkules/implementation_plan.md", planContent);

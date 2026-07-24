@@ -147,32 +147,51 @@ async function callGeminiApi(
   }
 }
 
+import { isFinnishText } from "./github.ts";
+
 /**
  * Uses Gemini API to dynamically generate natural, polite status comments in the exact language of the user's prompt.
  */
 export async function generateAiMessage(
   prompt: string,
-  messageType: "start" | "completion",
+  messageType: "start" | "completion" | "plan",
 ): Promise<string> {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
+  const isFinnish = isFinnishText(prompt);
 
   // Fallbacks if no API key is available
   if (!apiKey) {
     if (messageType === "start") {
-      return "I'm on it! 🚀 Starting work on this issue in a background worktree...";
+      return isFinnish
+        ? "Moi! Otan tämän työn alle saman tien eristetyssä työpuussa! 🚀"
+        : "I'm on it! 🚀 Starting work on this issue in a background worktree...";
     }
-    return "Task execution completed successfully! 🎉";
+    if (messageType === "plan") {
+      return isFinnish
+        ? "Moi! Kävin läpi tämän tehtävän ja laadin tiiviin toteutussuunnitelman sen toteuttamiseksi 🎯:"
+        : "Hey! I took a look at this task and put together a concise implementation plan 🎯:";
+    }
+    return isFinnish
+      ? "Toteutus valmis ja pull request luotu! 🎉"
+      : "Task execution completed successfully! 🎉";
   }
 
-  const systemInstruction = messageType === "start"
-    ? `You are Herkules, a helpful AI coding assistant.
+  let systemInstruction = "";
+  if (messageType === "start") {
+    systemInstruction = `You are Herkules, a helpful AI coding assistant.
 Generate a friendly, concise 1-sentence acknowledgement that you are starting work on the user's issue in a background worktree.
 Include relevant emojis (e.g. 🚀).
-CRITICAL: Respond ONLY in the EXACT SAME LANGUAGE as the user's prompt (e.g., if prompt is in English, reply in English; if in Finnish, reply in Finnish; if in Swedish, reply in Swedish). Do NOT add extra explanations or quotes.`
-    : `You are Herkules, a helpful AI coding assistant.
+CRITICAL: Respond ONLY in the EXACT SAME LANGUAGE as the user's prompt (e.g., if prompt is in English, reply in English; if in Finnish, reply in Finnish; if in Swedish, reply in Swedish). Do NOT add extra explanations or quotes.`;
+  } else if (messageType === "plan") {
+    systemInstruction = `You are Herkules, an enthusiastic, friendly AI coding assistant.
+Generate a warm, friendly 1-sentence greeting (with emojis like 🎯 or 📋) introducing a concise implementation plan for the user's issue.
+CRITICAL: Respond ONLY in the EXACT SAME LANGUAGE as the user's prompt. Do NOT write stiff robotic disclaimers or file path metadata. Keep it warm, human, and eager.`;
+  } else {
+    systemInstruction = `You are Herkules, a helpful AI coding assistant.
 Generate a friendly 1-sentence completion greeting celebrating that the task was finished and a PR was created.
 Include relevant emojis (e.g. 🎉).
 CRITICAL: Respond ONLY in the EXACT SAME LANGUAGE as the user's prompt. Do NOT add extra explanations or quotes.`;
+  }
 
   try {
     const res = await callGeminiApi(apiKey, `${systemInstruction}\n\nUser Issue/Prompt: "${prompt}"`);
@@ -183,8 +202,18 @@ CRITICAL: Respond ONLY in the EXACT SAME LANGUAGE as the user's prompt. Do NOT a
     // Ignore network error and use fallback
   }
 
-  return messageType === "start"
-    ? "I'm on it! 🚀 Starting work on this issue in a background worktree..."
+  if (messageType === "start") {
+    return isFinnish
+      ? "Moi! Otan tämän työn alle saman tien eristetyssä työpuussa! 🚀"
+      : "I'm on it! 🚀 Starting work on this issue in a background worktree...";
+  }
+  if (messageType === "plan") {
+    return isFinnish
+      ? "Moi! Kävin läpi tämän tehtävän ja laadin tiiviin toteutussuunnitelman sen toteuttamiseksi 🎯:"
+      : "Hey! I took a look at this task and put together a concise implementation plan 🎯:";
+  }
+  return isFinnish
+    ? "Toteutus valmis ja pull request luotu! 🎉"
     : "Task execution completed successfully! 🎉";
 }
 
