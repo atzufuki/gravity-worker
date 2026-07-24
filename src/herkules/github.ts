@@ -326,3 +326,89 @@ export async function createPullRequest(
     return null;
   }
 }
+
+export interface IssueCommentItem {
+  user: string;
+  body: string;
+  createdAt: string;
+}
+
+/**
+ * Fetches issue comments from GitHub REST API.
+ */
+export async function fetchIssueComments(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+  token: string,
+): Promise<IssueCommentItem[]> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`;
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "Accept": "application/vnd.github.v3+json",
+        "Authorization": `Bearer ${token}`,
+        "User-Agent": "Herkules",
+      },
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        return data.map((c: any) => ({
+          user: c.user?.login ?? "unknown",
+          body: c.body ?? "",
+          createdAt: c.created_at ?? "",
+        }));
+      }
+    }
+  } catch {
+    // Ignore fetch errors
+  }
+  return [];
+}
+
+/**
+ * Builds a full, context-rich issue prompt string including title, description, and Head & Tail comments.
+ */
+export function buildFullIssueContext(options: {
+  issueNumber?: number;
+  issueTitle?: string;
+  issueBody?: string;
+  comments?: IssueCommentItem[];
+  userInstruction?: string;
+}): string {
+  const { issueNumber, issueTitle, issueBody, comments = [], userInstruction } = options;
+
+  const parts: string[] = [];
+
+  if (issueTitle) {
+    parts.push(`Issue #${issueNumber ?? ""}: ${issueTitle}`);
+  }
+
+  if (issueBody && issueBody.trim()) {
+    parts.push(`--- Issue Description ---\n${issueBody.trim()}`);
+  }
+
+  if (comments.length > 0) {
+    let selectedComments: IssueCommentItem[] = [];
+    if (comments.length <= 6) {
+      selectedComments = comments;
+    } else {
+      const firstTwo = comments.slice(0, 2);
+      const lastFour = comments.slice(-4);
+      selectedComments = [...firstTwo, ...lastFour];
+    }
+
+    const commentsText = selectedComments
+      .map((c) => `@${c.user}: ${c.body.trim()}`)
+      .join("\n\n");
+
+    parts.push(`--- Recent Conversation Thread ---\n${commentsText}`);
+  }
+
+  if (userInstruction && userInstruction.trim()) {
+    parts.push(`--- Current User Instruction ---\n${userInstruction.trim()}`);
+  }
+
+  return parts.join("\n\n");
+}

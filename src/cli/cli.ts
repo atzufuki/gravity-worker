@@ -20,7 +20,7 @@ import {
 } from "@herkules/git.ts";
 import { AgentRunnerFactory, applyFallbackFileWrites, generateAiMessage } from "@herkules/runner.ts";
 import { generateCodeReview, generateImplementationPlan, generateWalkthrough, saveArtifact } from "@herkules/artifacts.ts";
-import { addReactionToIssueOrComment, createPullRequest, getGitHubContext, getRepoFromGitRemote, isFinnishText, postIssueComment } from "@herkules/github.ts";
+import { addReactionToIssueOrComment, buildFullIssueContext, createPullRequest, fetchIssueComments, getGitHubContext, getRepoFromGitRemote, isFinnishText, IssueCommentItem, postIssueComment } from "@herkules/github.ts";
 import { getAppInstallationToken, loadEnvFiles } from "@herkules/github_app.ts";
 import { generateConventionalMetadata } from "@herkules/conventional.ts";
 import { formatCommandResponse, parseCommentCommand } from "@herkules/commands.ts";
@@ -222,12 +222,28 @@ export async function main(args: string[] = Deno.args) {
 
       const issueNum = ghContext.issueNumber ?? (flags.issue ? parseInt(flags.issue, 10) : undefined);
 
+      // Fetch issue comments for full conversation context (Head & Tail strategy)
+      let comments: IssueCommentItem[] = [];
+      if (githubToken && ghContext.repoOwner && ghContext.repoName && issueNum) {
+        console.log(`💬 Fetching conversation thread for GitHub Issue #${issueNum}...`);
+        comments = await fetchIssueComments(ghContext.repoOwner, ghContext.repoName, issueNum, githubToken);
+      }
+
       // Parse interactive comment commands (@herkules plan, update, review, retry)
       const parsedCmd = parseCommentCommand(prompt);
-      const effectivePrompt = parsedCmd.prompt || ghContext.issueTitle || prompt;
+      const userInstruction = parsedCmd.prompt || prompt;
+      const effectivePrompt = userInstruction || ghContext.issueTitle || prompt;
+
+      const fullContextPrompt = buildFullIssueContext({
+        issueNumber: issueNum,
+        issueTitle: ghContext.issueTitle,
+        issueBody: ghContext.issueBody,
+        comments,
+        userInstruction: userInstruction !== prompt ? userInstruction : undefined,
+      });
 
       if (parsedCmd.isMentioned) {
-        console.log(`- Interactive Comment Command: @herkules ${parsedCmd.command}`);
+        console.log(`- Interactive Comment Command: @herkules-bot ${parsedCmd.command}`);
       }
 
       // Generate Conventional Commits metadata (feat/fix branch, commit msg, PR title)
@@ -286,14 +302,20 @@ export async function main(args: string[] = Deno.args) {
           const planIntro = await generateAiMessage(effectivePrompt, "plan");
 
           const planPrompt = isFinnish
-            ? `Olet Herkules, innokas ja ystävällinen tekoälyassistentti. Laadi tiivis, inhimillinen ja ihmisymmärrettävä toteutussuunnitelma (suomeksi) tehtävälle: "${effectivePrompt}".
+            ? `Olet Herkules, innokas ja ystävällinen tekoälyassistentti. Laadi tiivis, inhimillinen ja ihmisymmärrettävä toteutussuunnitelma (suomeksi) seuraavan Issuen pohjalta:
+
+${fullContextPrompt}
+
 Aloita teksti tästä tervehdyksestä: "${planIntro}"
 Kuvaa tiiviisti 3 selkeässä osiossa:
 1. Tiedostomuutokset (käytä TypeScript/Deno -muotoa: src/...)
 2. Ydinlogiikka
 3. Verifiointi & testaus (deno task test)
 ÄLÄ käytä robottimaisia lauseita kuten "An implementation plan has been prepared and documented at...". ÄLÄkä käytä python-tiedostoja (.py). Pidä teksti innokkaana, tiiviinä ja ihmiselle miellyttävänä lukea.`
-            : `You are Herkules, an enthusiastic and friendly AI coding assistant. Create a concise, warm, human-readable implementation plan for: "${effectivePrompt}".
+            : `You are Herkules, an enthusiastic and friendly AI coding assistant. Create a concise, warm, human-readable implementation plan based on this issue:
+
+${fullContextPrompt}
+
 Start with this greeting: "${planIntro}"
 Summarize clearly in 3 concise sections:
 1. Architecture & Files (use TypeScript/Deno layout: src/...)
@@ -301,7 +323,7 @@ Summarize clearly in 3 concise sections:
 3. Verification (deno task test)
 Do NOT use stiff robotic statements like "An implementation plan has been prepared and documented at...". Do NOT use python files (.py). Keep it energetic, concise, and natural to read.`;
 
-          let planContent = "";
+          let planResultContent = "";
           const proxyUrl = flags.proxy ?? Deno.env.get("HERKULES_PROXY_URL") ?? Deno.env.get("GRAVITY_WORKER_PROXY_URL");
 
           if (proxyUrl) {
@@ -314,22 +336,22 @@ Do NOT use stiff robotic statements like "An implementation plan has been prepar
               });
               if (resp.ok) {
                 const data = await resp.json();
-                planContent = data.logs || data.output || "";
+                planResultContent = data.logs || data.output || "";
               }
             } catch {
               // Fallback to static helper
             }
           }
 
-          if (!planContent || planContent.length < 30) {
-            planContent = `${planIntro}\n\n${generateImplementationPlan({ taskId, prompt: effectivePrompt, agentName: flags.agent })}`;
+          if (!planResultContent || planResultContent.length < 30) {
+            planResultContent = `${planIntro}\n\n${generateImplementationPlan({ taskId, prompt: effectivePrompt, agentName: flags.agent })}`;
           }
 
-          await saveArtifact(worktree.worktreePath, ".herkules/implementation_plan.md", planContent);
+          await saveArtifact(worktree.worktreePath, ".herkules/implementation_plan.md", planResultContent);
 
           const planCmdRes = formatCommandResponse("plan", {
             prompt: effectivePrompt,
-            content: planContent,
+            content: planResultContent,
             issueNumber: issueNum,
           });
 
@@ -367,7 +389,7 @@ Do NOT use stiff robotic statements like "An implementation plan has been prepar
               },
               signal: AbortSignal.timeout(300000),
               body: JSON.stringify({
-                prompt: effectivePrompt,
+                prompt: fullContextPrompt,
                 issueNum,
                 repoSpec,
               }),
@@ -396,7 +418,7 @@ Do NOT use stiff robotic statements like "An implementation plan has been prepar
             console.log("⚡ Falling back to native agent execution in CI...");
             const runner = AgentRunnerFactory.getRunner(flags.agent);
             result = await runner.run({
-              prompt: effectivePrompt,
+              prompt: fullContextPrompt,
               worktreePath: worktree.worktreePath,
               dryRun: flags["dry-run"],
             });
@@ -405,7 +427,7 @@ Do NOT use stiff robotic statements like "An implementation plan has been prepar
           console.log(`\n🤖 Executing agent (${flags.agent})...`);
           const runner = AgentRunnerFactory.getRunner(flags.agent);
           result = await runner.run({
-            prompt: effectivePrompt,
+            prompt: fullContextPrompt,
             worktreePath: worktree.worktreePath,
             dryRun: flags["dry-run"],
           });

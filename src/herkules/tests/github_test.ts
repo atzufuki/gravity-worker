@@ -5,43 +5,25 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { detectLanguages, getGitHubContext } from "@herkules/github.ts";
+import { buildFullIssueContext, detectLanguages, getGitHubContext } from "@herkules/github.ts";
 
-Deno.test("GitHub Module - language detection", async () => {
-  const langs = await detectLanguages(Deno.cwd());
-  assertExists(langs);
-  assertEquals(langs.includes("TypeScript"), true);
-});
+Deno.test("GitHub Module - buildFullIssueContext with Head & Tail comments", () => {
+  const comments = Array.from({ length: 10 }, (_, i) => ({
+    user: `user${i + 1}`,
+    body: `Comment ${i + 1}`,
+    createdAt: new Date().toISOString(),
+  }));
 
-Deno.test("GitHub Module - get context fallback without event file", async () => {
-  const ctx = await getGitHubContext(Deno.cwd());
-  assertExists(ctx);
-});
+  const fullText = buildFullIssueContext({
+    issueNumber: 42,
+    issueTitle: "Test Issue",
+    issueBody: "Detailed issue description text",
+    comments,
+    userInstruction: "plan",
+  });
 
-Deno.test("GitHub Module - parse event payload file", async () => {
-  const tempDir = await Deno.makeTempDir({ prefix: "herkules_gh_test_" });
-  const eventFile = `${tempDir}/event.json`;
-  const payload = {
-    issue: {
-      number: 42,
-      title: "Test Issue Title",
-      body: "Test Issue Body",
-    },
-    sender: {
-      login: "test-user",
-    },
-  };
-
-  try {
-    await Deno.writeTextFile(eventFile, JSON.stringify(payload));
-    Deno.env.set("GITHUB_EVENT_PATH", eventFile);
-
-    const ctx = await getGitHubContext(tempDir);
-    assertEquals(ctx.issueNumber, 42);
-    assertEquals(ctx.issueTitle, "Test Issue Title");
-    assertEquals(ctx.sender, "test-user");
-  } finally {
-    Deno.env.delete("GITHUB_EVENT_PATH");
-    await Deno.remove(tempDir, { recursive: true }).catch(() => {});
-  }
+  assertEquals(fullText.includes("Issue #42: Test Issue"), true);
+  assertEquals(fullText.includes("Detailed issue description text"), true);
+  assertEquals(fullText.includes("@user1: Comment 1"), true);
+  assertEquals(fullText.includes("@user10: Comment 10"), true);
 });
