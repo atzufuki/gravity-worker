@@ -71,20 +71,37 @@ export async function tunnelView(request: Request): Promise<Response> {
       body: bodyText || undefined,
     };
 
-    const tunnelRes = await TunnelRegistry.sendStreamingRequest(
+    // Return a streaming ReadableStream Response immediately to avoid Deno Deploy 503 gateway timeouts
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+
+    TunnelRegistry.sendStreamingRequest(
       repoSpec,
       tunnelReq,
       (chunkData) => {
         if (chunkData.chunk) {
-          console.log(`[Tunnel] Stream chunk for #${tunnelReq.id}: ${chunkData.chunk.trim()}`);
+          writer.write(encoder.encode(chunkData.chunk)).catch(() => {});
         }
       },
       300000,
-    );
+    ).then(async (tunnelRes) => {
+      if (tunnelRes.body) {
+        await writer.write(encoder.encode(tunnelRes.body)).catch(() => {});
+      }
+      await writer.close().catch(() => {});
+    }).catch(async (err) => {
+      await writer.write(encoder.encode(JSON.stringify({ success: false, error: String(err) }))).catch(() => {});
+      await writer.close().catch(() => {});
+    });
 
-    return new Response(tunnelRes.body, {
-      status: tunnelRes.status,
-      headers: tunnelRes.headers,
+    return new Response(readable, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-cache",
+      },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

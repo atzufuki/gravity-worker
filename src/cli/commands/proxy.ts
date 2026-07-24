@@ -319,6 +319,13 @@ export class ProxyCommand extends BaseCommand {
             // 2. Recursively collect generated/modified files from worktree
             const files = await collectModifiedFiles(worktreePath);
 
+            // Fallback: If agent produced summary output but 0 disk files modified, preserve summary artifact
+            if (Object.keys(files).length === 0 && result.output && result.output.trim().length > 0) {
+              const summaryRelPath = ".herkules/summary.md";
+              files[summaryRelPath] = result.output.trim();
+              console.log(`✨ Preserved execution summary artifact in ${summaryRelPath}`);
+            }
+
             // 3. Safely clean up temporary worktree
             if (worktreeObj) {
               await removeWorktree(worktreeObj, { deleteBranch: true }).catch(() => {});

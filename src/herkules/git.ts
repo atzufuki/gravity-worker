@@ -245,5 +245,13 @@ export async function pushWorktreeBranch(
   if (force) {
     args.push("--force-with-lease");
   }
-  await runGit(args, worktreePath);
+  try {
+    await runGit(args, worktreePath);
+  } catch {
+    // If --force-with-lease failed due to stale ref info, fetch latest remote ref and retry push
+    await runGit(["fetch", remote, branchName], worktreePath).catch(() => {});
+    const retryArgs = args.filter((a) => a !== "--force-with-lease");
+    if (force) retryArgs.push("--force");
+    await runGit(retryArgs, worktreePath);
+  }
 }
