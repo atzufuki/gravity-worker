@@ -171,7 +171,7 @@ export async function analyzeDiffWithAI(
     }
 
     // 3. Style & Maintenance Checks
-    if (/console\.log\(/.test(code) && !item.path.includes("test") && !item.path.includes("cli")) {
+    if (/console\.log\(/.test(code) && !item.path.toLowerCase().includes("test") && !item.path.toLowerCase().includes("cli") && !item.path.toLowerCase().includes("herkules")) {
       inlineComments.push({
         path: item.path,
         line: item.line,

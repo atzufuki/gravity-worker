@@ -58,7 +58,7 @@ runs:
         HERKULES_PRIVATE_KEY: ${{ inputs.private-key }}
         HERKULES_PROXY_URL: ${{ inputs.proxy-url }}
       run: |
-        stdbuf -ol -el deno run -A ${{ github.action_path }}/src/cli/cli.ts run \
+        stdbuf -oL -eL deno run -A ${{ github.action_path }}/src/cli/cli.ts run \
           --prompt "${{ inputs.prompt }}" \
           --agent "${{ inputs.agent }}" \
           --issue "${{ inputs.issue-id }}" \
