@@ -337,8 +337,8 @@ ${fullContextPrompt}
 Aloita teksti tästä tervehdyksestä: "${planIntro}"
 Kuvaa tiiviisti 3 selkeässä osiossa:
 1. Tiedostomuutokset (käytä TypeScript/Deno -muotoa: src/...)
-2. Ydinlogiikka
-3. Verifiointi & testaus (deno task test)
+2. Ydinlogiikka & ominaisuudet
+3. Uudet testit & verifiointi (täsmennä uusien unit/integraatiotestien luonti ominaisuudelle ja deno task test -ajo)
 ÄLÄ käytä robottimaisia lauseita kuten "An implementation plan has been prepared and documented at...". ÄLÄkä käytä python-tiedostoja (.py). Pidä teksti innokkaana, tiiviinä ja ihmiselle miellyttävänä lukea.`
             : `You are Herkules, an enthusiastic and friendly AI coding assistant. Create a concise, warm, human-readable implementation plan based on this issue:
 
@@ -348,7 +348,7 @@ Start with this greeting: "${planIntro}"
 Summarize clearly in 3 concise sections:
 1. Architecture & Files (use TypeScript/Deno layout: src/...)
 2. Core Logic & Features
-3. Verification (deno task test)
+3. New Tests & Verification (explicitly specify writing new unit/integration tests for the feature and running deno task test)
 Do NOT use stiff robotic statements like "An implementation plan has been prepared and documented at...". Do NOT use python files (.py). Keep it energetic, concise, and natural to read.`;
 
           let planResultContent = "";
