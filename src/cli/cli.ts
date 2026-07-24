@@ -366,13 +366,55 @@ Do NOT use stiff robotic statements like "An implementation plan has been prepar
                 const data = await resp.json();
                 planResultContent = data.logs || data.output || "";
               }
-            } catch {
-              // Fallback to static helper
+            } catch (err) {
+              console.warn(`⚠️ Proxy execution failed for plan: ${err instanceof Error ? err.message : String(err)}`);
             }
           }
 
           if (!planResultContent || planResultContent.length < 30) {
-            planResultContent = `${planIntro}\n\n${generateImplementationPlan({ taskId, prompt: effectivePrompt, agentName: flags.agent })}`;
+            console.log("⚡ Executing native AI runner for implementation plan generation...");
+            try {
+              const runner = AgentRunnerFactory.getRunner(flags.agent);
+              const planRunResult = await runner.run({
+                prompt: planPrompt,
+                worktreePath: worktree.worktreePath,
+                dryRun: true,
+              });
+              if (planRunResult.output && planRunResult.output.length >= 30) {
+                planResultContent = planRunResult.output;
+              }
+            } catch (err) {
+              console.warn(`⚠️ Native AI execution failed for plan: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+
+          if (!planResultContent || planResultContent.length < 30) {
+            console.error("❌ Implementation plan generation failed: AI Agent was unreachable or failed to respond.");
+            const errorMsg = isFinnish
+              ? "Toteutussuunnitelman luonti epäonnistui: Tekoälyagenttiin (Antigravity/Proxy) ei saatu yhteyttä suunnitelman laatimiseksi. Varmista että lokaali proxy (`./herkules proxy`) tai GEMINI_API_KEY on aktiivinen."
+              : "Implementation plan generation failed: Could not connect to the AI agent (Antigravity/Proxy) to analyze the codebase. Please ensure the local proxy (`./herkules proxy`) or GEMINI_API_KEY is active.";
+
+            const failRes = formatCommandResponse("plan", {
+              prompt: effectivePrompt,
+              success: false,
+              error: errorMsg,
+              issueNumber: issueNum,
+            });
+
+            if (githubToken && ghContext.repoOwner && ghContext.repoName && issueNum) {
+              await postIssueComment({
+                owner: ghContext.repoOwner,
+                repo: ghContext.repoName,
+                issueNumber: issueNum,
+                body: failRes.body,
+                token: githubToken,
+              }).catch(() => {});
+            }
+
+            if (!flags["keep-worktree"]) {
+              await removeWorktree(worktree, { deleteBranch: true });
+            }
+            return;
           }
 
           await saveArtifact(worktree.worktreePath, ".herkules/implementation_plan.md", planResultContent);
