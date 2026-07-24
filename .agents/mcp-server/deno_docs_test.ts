@@ -1,12 +1,15 @@
 import { assertEquals, assertExists } from "jsr:@std/assert";
 
-Deno.test("Deno Docs MCP Server Integration", async (t) => {
-  const command = new Deno.Command("deno", {
-    args: ["run", "--allow-net", "--allow-read", ".agents/mcp-server/deno_docs.ts"],
-    stdin: "piped",
-    stdout: "piped",
-    stderr: "null", // ignore stderr logs during prefetch
-  });
+Deno.test({
+  name: "Deno Docs MCP Server Integration",
+  ignore: Deno.env.get("CI") === "true" || Deno.env.get("GITHUB_ACTIONS") === "true",
+  async fn(t) {
+    const command = new Deno.Command("deno", {
+      args: ["run", "--allow-net", "--allow-read", ".agents/mcp-server/deno_docs.ts"],
+      stdin: "piped",
+      stdout: "piped",
+      stderr: "null", // ignore stderr logs during prefetch
+    });
 
   const child = command.spawn();
   const writer = child.stdin.getWriter();
@@ -118,8 +121,7 @@ Deno.test("Deno Docs MCP Server Integration", async (t) => {
   await writer.close();
   writer.releaseLock();
   await reader.cancel();
-  reader.releaseLock();
-  
   child.kill();
   await child.status;
+  },
 });

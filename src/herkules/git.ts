@@ -32,6 +32,10 @@ async function runGit(args: string[], cwd?: string): Promise<string> {
   const command = new Deno.Command("git", {
     args,
     cwd,
+    env: {
+      ...Deno.env.toObject(),
+      GIT_TERMINAL_PROMPT: "0",
+    },
     stdout: "piped",
     stderr: "piped",
   });
@@ -92,10 +96,9 @@ export async function createWorktree(
 
   const currentBranch = baseBranch ?? await getCurrentBranch(cwd).catch(() => "main");
 
-  // 2. Delete old local & remote task branch if not explicitly reusing, to ensure a fresh PR can be created on GitHub
+  // 2. Delete old local task branch if not explicitly reusing
   if (!reuseBranch) {
     await runGit(["branch", "-D", branchName], cwd).catch(() => {});
-    await runGit(["push", "origin", "--delete", branchName], cwd).catch(() => {});
   }
 
   // 3. Check if target branch already exists locally
@@ -215,14 +218,30 @@ export async function commitWorktreeChanges(
 
 /**
  * Pushes worktree branch to remote repository using --force-with-lease to safely update existing PR branches.
+ * Embeds authentication token into push URL when provided to bypass default GITHUB_TOKEN workflow edit restrictions.
  */
 export async function pushWorktreeBranch(
   worktreePath: string,
   branchName: string,
   remote = "origin",
   force = true,
+  token?: string,
 ): Promise<void> {
-  const args = ["push", "-u", remote, branchName];
+  const args = ["push", "-u"];
+
+  if (token && token.trim().length > 0 && token !== "undefined") {
+    const remoteUrl = await runGit(["remote", "get-url", remote], worktreePath).catch(() => "");
+    if (remoteUrl.includes("github.com")) {
+      const cleanUrl = remoteUrl.replace(/^https:\/\/[^@]+@/, "https://");
+      const authUrl = cleanUrl.replace("https://github.com/", `https://x-access-token:${token.trim()}@github.com/`);
+      args.push(authUrl, branchName);
+    } else {
+      args.push(remote, branchName);
+    }
+  } else {
+    args.push(remote, branchName);
+  }
+
   if (force) {
     args.push("--force-with-lease");
   }

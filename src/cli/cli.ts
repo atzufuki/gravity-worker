@@ -423,14 +423,19 @@ export async function main(args: string[] = Deno.args) {
         if (result.success && !flags["dry-run"]) {
           console.log(`\n📤 Committing & pushing branch ${worktree.branchName}...`);
           const committed = await commitWorktreeChanges(worktree.worktreePath, conventional.commitMessage);
+          let pushedSuccess = false;
           if (committed) {
-            await pushWorktreeBranch(worktree.worktreePath, worktree.branchName).catch((e) => {
-              console.warn(`[Git Push Warning] ${e.message}`);
-            });
+            try {
+              await pushWorktreeBranch(worktree.worktreePath, worktree.branchName, "origin", true, githubToken);
+              pushedSuccess = true;
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              console.error(`❌ Git Push Failed: ${msg}`);
+            }
           }
 
-          // 10. Create GitHub Pull Request using Conventional PR Title
-          if (githubToken && ghContext.repoOwner && ghContext.repoName) {
+          // 10. Create GitHub Pull Request using Conventional PR Title if push succeeded
+          if (pushedSuccess && githubToken && ghContext.repoOwner && ghContext.repoName) {
             console.log(`\n🔀 Creating GitHub Pull Request...`);
             const prTitle = conventional.prTitle;
 

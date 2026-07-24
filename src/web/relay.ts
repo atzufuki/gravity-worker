@@ -46,7 +46,37 @@ async function getKv(): Promise<any> {
   return kvInstance;
 }
 
-const tunnelBus = new BroadcastChannel("herkules-tunnel-bus");
+let tunnelBusInstance: BroadcastChannel | null = null;
+
+function getTunnelBus(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === "undefined") return null;
+  if (!tunnelBusInstance) {
+    tunnelBusInstance = new BroadcastChannel("herkules-tunnel-bus");
+  }
+  return tunnelBusInstance;
+}
+
+/**
+ * Closes background BroadcastChannel and DenoKV handles for clean process exit.
+ */
+export function cleanupRelay() {
+  if (tunnelBusInstance) {
+    try {
+      tunnelBusInstance.close();
+    } catch {
+      // Ignore
+    }
+    tunnelBusInstance = null;
+  }
+  if (kvInstance) {
+    try {
+      kvInstance.close();
+    } catch {
+      // Ignore
+    }
+    kvInstance = null;
+  }
+}
 
 /**
  * Manages WebSocket tunnel connections indexed by repoSpec ("owner/repo").
@@ -60,15 +90,17 @@ export class TunnelRegistry {
   private static initBus() {
     if (this.busInitialized) return;
     this.busInitialized = true;
+    const bus = getTunnelBus();
+    if (!bus) return;
 
-    tunnelBus.onmessage = async (event) => {
+    bus.onmessage = async (event) => {
       try {
         const data = event.data;
         if (data.type === "req") {
           const ws = this.connections.get(data.repoSpec);
           if (ws && ws.readyState === WebSocket.OPEN) {
             const res = await this.sendLocalWsRequest(ws, data.req);
-            tunnelBus.postMessage({ type: "res", reqId: data.req.id, res });
+            getTunnelBus()?.postMessage({ type: "res", reqId: data.req.id, res });
           }
         } else if (data.type === "res") {
           const resolver = this.pendingRequests.get(data.reqId);
@@ -222,7 +254,7 @@ export class TunnelRegistry {
       return this.sendLocalWsRequest(ws, req, timeoutMs);
     }
 
-    tunnelBus.postMessage({ type: "req", repoSpec: key, req });
+    getTunnelBus()?.postMessage({ type: "req", repoSpec: key, req });
 
     try {
       const kv = await getKv();

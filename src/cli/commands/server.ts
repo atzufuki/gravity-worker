@@ -44,6 +44,11 @@ export async function resolveGitHubToken(): Promise<string | undefined> {
 export class ServerCommand extends BaseCommand {
   override name = "server";
   override help = "Listen for GitHub issue 'herkules' labels and execute tasks automatically on local workstation";
+  private running = true;
+
+  public stop() {
+    this.running = false;
+  }
 
   /**
    * Processes a single polling cycle. Exposed for unit & integration testing.
@@ -255,7 +260,7 @@ export class ServerCommand extends BaseCommand {
       }
     };
 
-    while (true) {
+    while (this.running) {
       try {
         await this.processCycle(
           owner,
@@ -271,7 +276,13 @@ export class ServerCommand extends BaseCommand {
         console.warn(`[Daemon Watcher Warning] Error checking GitHub issues:`, e);
       }
 
+      if (options.once) {
+        break;
+      }
+
       await new Promise((r) => setTimeout(r, pollInterval));
     }
+
+    return { exitCode: 0 };
   }
 }

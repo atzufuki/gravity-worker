@@ -1,5 +1,6 @@
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
 import { healthView, tokenRelayView, tunnelView } from "@web/views.ts";
+import { cleanupRelay } from "@web/relay.ts";
 
 Deno.test("Views API - healthView returns HTTP 200 with status ok and version", async () => {
   const req = new Request("http://localhost:8000/health/");
@@ -38,11 +39,15 @@ Deno.test("Views API - tunnelView invalid path format returns HTTP 400", async (
 });
 
 Deno.test("Views API - tunnelView health check offline repo returns HTTP 503", async () => {
-  const req = new Request("http://localhost:8000/tunnel/nonexistent-owner/nonexistent-repo/health");
-  const res = await tunnelView(req);
-  assertEquals(res.status, 503);
+  try {
+    const req = new Request("http://localhost:8000/tunnel/nonexistent-owner/nonexistent-repo/health");
+    const res = await tunnelView(req);
+    assertEquals(res.status, 503);
 
-  const data = await res.json();
-  assertEquals(data.status, "offline");
-  assertEquals(data.repo, "nonexistent-owner/nonexistent-repo");
+    const data = await res.json();
+    assertEquals(data.status, "offline");
+    assertEquals(data.repo, "nonexistent-owner/nonexistent-repo");
+  } finally {
+    cleanupRelay();
+  }
 });

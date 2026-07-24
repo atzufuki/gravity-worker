@@ -21,11 +21,48 @@ import { createWorktree, removeWorktree } from "@herkules/git.ts";
 import { handleTokenRelayRequest, TunnelMessage, TunnelResponse } from "@web/relay.ts";
 
 /**
- * Recursively scans directory to collect modified and new text files.
+ * Recursively scans directory using git status --porcelain to collect only modified and new text files.
  */
 export async function collectModifiedFiles(dirPath: string): Promise<Record<string, string>> {
   const files: Record<string, string> = {};
 
+  try {
+    const command = new Deno.Command("git", {
+      args: ["status", "--porcelain", "-uall"],
+      cwd: dirPath,
+      stdout: "piped",
+      stderr: "piped",
+    });
+    const output = await command.output();
+
+    if (output.success) {
+      const statusText = new TextDecoder().decode(output.stdout);
+      const lines = statusText.split("\n").map((l) => l.trim()).filter(Boolean);
+
+      for (const line of lines) {
+        // Line format: " M path/to/file" or "?? path/to/file" or "A  path/to/file"
+        const relPath = line.substring(3).trim();
+        if (!relPath || relPath.startsWith(".git/") || relPath.startsWith(".worktrees/")) {
+          continue;
+        }
+
+        try {
+          const fullPath = join(dirPath, relPath);
+          const content = await Deno.readTextFile(fullPath);
+          files[relPath] = content;
+        } catch {
+          // Ignore deleted files or binary files
+        }
+      }
+
+      // Always return git status results if git was available, never fall back to full tree dump
+      return files;
+    }
+  } catch {
+    // Fall back to recursive walk ONLY if git binary command fails to execute
+  }
+
+  // Fallback recursive directory walk for non-git temp directories
   async function walkDir(currentDir: string) {
     try {
       for await (const entry of Deno.readDir(currentDir)) {
@@ -193,9 +230,12 @@ export class ProxyCommand extends BaseCommand {
       }
     }
 
+    const HERKULES_VERSION = "0.1.2-strict-diff";
+
     console.log("=======================================================");
-    console.log("🚀 HERKULES LOCAL ANTIGRAVITY PROXY SERVER STARTED");
+    console.log(`🚀 HERKULES LOCAL ANTIGRAVITY PROXY SERVER STARTED (v${HERKULES_VERSION})`);
     console.log("=======================================================");
+    console.log(`- Version:         v${HERKULES_VERSION}`);
     console.log(`- Listening Port:  ${port}`);
     console.log(`- Engine:          ANTIGRAVITY (agy CLI / Google AI Ultra)`);
     console.log(`- Target Repo:     ${repoSpec ?? "Auto-detect"}`);
@@ -211,7 +251,7 @@ export class ProxyCommand extends BaseCommand {
         // 1. Health check endpoint for GitHub Actions pre-flight check
         if (req.method === "GET" && (url.pathname === "/health" || url.pathname.endsWith("/health") || url.pathname === "/")) {
           return new Response(
-            JSON.stringify({ status: "ok", engine: "antigravity", version: "0.1.0" }),
+            JSON.stringify({ status: "ok", engine: "antigravity", version: HERKULES_VERSION }),
             { headers: { "Content-Type": "application/json", "Bypass-Tunnel-Remainder": "true" } },
           );
         }
@@ -242,7 +282,7 @@ export class ProxyCommand extends BaseCommand {
               );
             }
 
-            console.log(`\n🎯 Received proxy execution request for Issue #${body.issueNum ?? "N/A"}`);
+            console.log(`\n🎯 [v${HERKULES_VERSION}] Received proxy execution request for Issue #${body.issueNum ?? "N/A"}`);
             console.log(`  Prompt: "${body.prompt.substring(0, 80)}..."`);
 
             // 1. Create an isolated Git Worktree for execution

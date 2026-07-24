@@ -13,13 +13,39 @@ Deno.test("ServerCommand - instantiation and property checks", () => {
   assertExists(cmd.help);
 });
 
-Deno.test("ServerCommand - missing target repo returns error exit code", async () => {
-  const tempDir = await Deno.makeTempDir({ prefix: "gw_server_test_" });
-  try {
-    const cmd = new ServerCommand();
-    const result = await cmd.handle({ repo: tempDir });
-    assertEquals(result.exitCode, 1);
-  } finally {
-    await Deno.remove(tempDir, { recursive: true }).catch(() => {});
-  }
+Deno.test("ServerCommand - processCycle single iteration verification", async () => {
+  const serverCmd = new ServerCommand();
+  const processedIssues = new Set<number>();
+  let saveStateCalled = false;
+  const saveState = async () => {
+    saveStateCalled = true;
+  };
+
+  const executedIssues: number[] = [];
+  const fakeExecFn = async (issueNum: number) => {
+    executedIssues.push(issueNum);
+    return true;
+  };
+
+  // Single cycle with mock issue
+  const cycleResponse = [{ number: 99, title: "Test Daemon Task" }];
+  const fakeFetch = async () => new Response(JSON.stringify(cycleResponse), { status: 200 });
+
+  const res = await serverCmd.processCycle(
+    "test-owner",
+    "test-repo",
+    ".",
+    processedIssues,
+    saveState,
+    "mock-token",
+    "antigravity",
+    undefined,
+    fakeFetch as unknown as typeof fetch,
+    fakeExecFn,
+  );
+
+  assertEquals(res.triggeredCount, 1);
+  assertEquals(processedIssues.has(99), true);
+  assertEquals(executedIssues, [99]);
+  assertEquals(saveStateCalled, true);
 });

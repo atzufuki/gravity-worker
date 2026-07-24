@@ -81,6 +81,7 @@ export function buildAppManifest(options: ManifestOptions = {}): Record<string, 
       contents: "write",
       issues: "write",
       pull_requests: "write",
+      workflows: "write",
       actions: "read",
     },
     default_events: [

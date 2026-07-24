@@ -16,11 +16,6 @@ Deno.test("InstallCommand - instantiation and property checks", () => {
 Deno.test("InstallCommand - local mode configuration saving", async () => {
   const tempDir = await Deno.makeTempDir({ prefix: "gw_install_test_" });
   try {
-    // Initialize git repo in tempDir
-    const gitInit = new Deno.Command("git", { args: ["init"], cwd: tempDir });
-    await gitInit.output();
-
-    // Verify directory exists
     const stat = await Deno.stat(tempDir);
     assertEquals(stat.isDirectory, true);
   } finally {

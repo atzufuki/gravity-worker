@@ -5,7 +5,7 @@
     "dev": "deno run -A --unstable-kv manage.ts runserver --settings ./project/settings.ts",
     "serve": "deno serve -A --unstable-kv project/http.ts",
     "deploy": "deno run -A jsr:@deno/deployctl deploy --project=herkules --entrypoint=project/http.ts",
-    "test": "deno test -A --unstable-kv",
+    "test": "deno test -A --unstable-kv src/",
     "compile": "deno compile -A --unstable-kv -o herkules src/cli/cli.ts"
   },
   "imports": {

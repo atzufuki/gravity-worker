@@ -198,9 +198,23 @@ export class InstallCommand extends BaseCommand {
       if (repoSpec) {
         const [owner, repo] = repoSpec.split("/");
         if (owner && repo) {
-          const token = Deno.env.get("GITHUB_TOKEN");
+          let token = Deno.env.get("GITHUB_TOKEN") || Deno.env.get("GH_TOKEN");
+          if (!token) {
+            try {
+              const tokenCmd = new Deno.Command("gh", { args: ["auth", "token"], stdout: "piped" });
+              const out = await tokenCmd.output();
+              if (out.success) {
+                token = new TextDecoder().decode(out.stdout).trim();
+              }
+            } catch {
+              // Ignore
+            }
+          }
           if (token) {
-            await enableRepoWorkflowPermissions(owner, repo, token).catch(() => {});
+            const enabled = await enableRepoWorkflowPermissions(owner, repo, token).catch(() => false);
+            if (enabled) {
+              console.log("✓ Automatically enabled Read & Write workflow permissions for repository.");
+            }
           }
         }
       }

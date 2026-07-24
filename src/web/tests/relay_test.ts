@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { TunnelRegistry, handleTokenRelayRequest } from "@web/relay.ts";
+import { TunnelRegistry, handleTokenRelayRequest, cleanupRelay } from "@web/relay.ts";
 
 Deno.test("Relay Subsystem - handleTokenRelayRequest missing parameters returns 400", async () => {
   const req = new Request("http://localhost:8000/api/token");
@@ -8,6 +8,10 @@ Deno.test("Relay Subsystem - handleTokenRelayRequest missing parameters returns 
 });
 
 Deno.test("Relay Subsystem - TunnelRegistry status tracking", async () => {
-  const isOnline = await TunnelRegistry.isOnline("atzufuki/siht.io");
-  assertEquals(isOnline, false);
+  try {
+    const isOnline = await TunnelRegistry.isOnline("atzufuki/siht.io");
+    assertEquals(isOnline, false);
+  } finally {
+    cleanupRelay();
+  }
 });
